@@ -146,7 +146,7 @@ const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const lerp = (a, b, t) => a + (b - a) * t;
 const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 
-const ROUND_TIME = 120;
+const ROUND_TIME = 600;   // 10-minute rounds
 const EAT = 0.9;            // an object fits if its radius <= hole radius * EAT
 const HALF = 79;            // playable half-size
 const CITY = 80;            // textured ground half-size
@@ -158,14 +158,14 @@ const UP = new THREE.Vector3(0, 1, 0);
 
 const LEVELS = [
   { R: 0.65, need: 0,    name: 'Pothole',    eats: 'cones, bins, bushes' },
-  { R: 0.95, need: 12,   name: 'Manhole',    eats: 'people, benches, lamps' },
-  { R: 1.45, need: 45,   name: 'Sinkhole',   eats: 'cars!' },
-  { R: 2.4,  need: 130,  name: 'Crater',     eats: 'trees, buses, fountains' },
-  { R: 3.2,  need: 320,  name: 'Pit',        eats: 'houses' },
-  { R: 4.6,  need: 750,  name: 'Chasm',      eats: 'shops & apartments' },
-  { R: 6.3,  need: 1600, name: 'Abyss',      eats: 'SKYSCRAPERS' },
-  { R: 8.8,  need: 3200, name: 'Mega Void',  eats: 'THE GULP TOWER' },
-  { R: 12,   need: 6000, name: 'BLACK HOLE', eats: 'absolutely everything' },
+  { R: 0.95, need: 40,    name: 'Manhole',    eats: 'people, benches, lamps' },
+  { R: 1.45, need: 180,   name: 'Sinkhole',   eats: 'cars!' },
+  { R: 2.4,  need: 550,   name: 'Crater',     eats: 'trees, buses, fountains' },
+  { R: 3.2,  need: 1600,  name: 'Pit',        eats: 'houses' },
+  { R: 4.6,  need: 3200,  name: 'Chasm',      eats: 'shops & apartments' },
+  { R: 6.3,  need: 7500,  name: 'Abyss',      eats: 'SKYSCRAPERS' },
+  { R: 8.8,  need: 16000, name: 'Mega Void',  eats: 'THE GULP TOWER' },
+  { R: 12,   need: 30000, name: 'BLACK HOLE', eats: 'absolutely everything' },
 ];
 
 /* ---------------- renderer / scene ---------------- */
@@ -186,8 +186,8 @@ scene.fog.color = skyCol;
 
 const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.5, 900);
 camera.position.set(0, 60, 60);
-const hemi = new THREE.HemisphereLight(0xe8f6ff, 0x6d8a4f, 1.5);
-const sun = new THREE.DirectionalLight(0xfff6e5, 2.3);
+const hemi = new THREE.HemisphereLight(0xf2f9ff, 0x9fb7a0, 1.9);
+const sun = new THREE.DirectionalLight(0xfff6e5, 1.9);
 sun.castShadow = true;
 const SM = isTouch ? 1024 : 2048;
 sun.shadow.mapSize.set(SM, SM);
@@ -231,7 +231,7 @@ function patchDark(mat) {
 /* ---------------- materials ---------------- */
 const vcMat = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }); patchDark(vcMat);
 const goldMat = new THREE.MeshPhongMaterial({ color: 0xffc83d, emissive: 0x5a3a00, specular: 0xffffff, shininess: 90, flatShading: true }); patchDark(goldMat);
-const roofMat = new THREE.MeshLambertMaterial({ color: 0x8a8f98 }); patchDark(roofMat);
+const roofMat = new THREE.MeshLambertMaterial({ color: 0xdfe3ea }); patchDark(roofMat);
 const winMat = new THREE.MeshLambertMaterial({ color: 0xa8dcff, emissive: 0xffc35a, emissiveIntensity: 0 }); patchDark(winMat);
 const bulbMat = new THREE.MeshLambertMaterial({ color: 0xfff4d0, emissive: 0xffd36b, emissiveIntensity: 0 }); patchDark(bulbMat);
 const lampLightMat = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0, blending: THREE.AdditiveBlending,
@@ -314,11 +314,15 @@ function wallTex(col, glass) {
   const key = 'w' + col + glass;
   if (!texCache.has(key)) texCache.set(key, canvasTex((g) => {
     g.fillStyle = col; g.fillRect(0, 0, 256, 256);
+    // soft floor bands
+    g.fillStyle = 'rgba(255,255,255,0.22)';
+    for (let j = 0; j < 4; j++) g.fillRect(0, j * 64 + 58, 256, 6);
     for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) {
       const [x, y, w, h] = winRect(glass, i, j);
-      g.fillStyle = 'rgba(0,0,0,0.12)'; g.fillRect(x - 3, y + h, w + 6, 4);
-      g.fillStyle = glass ? '#3d5f86' : '#4b6c92'; g.fillRect(x, y, w, h);
-      g.fillStyle = 'rgba(255,255,255,0.25)'; g.fillRect(x + 3, y + 3, w * 0.35, h - 6);
+      g.fillStyle = '#ffffff'; g.fillRect(x - 3, y - 3, w + 6, h + 6);          // clean white frame
+      g.fillStyle = glass ? '#5aa9e6' : '#6cc4f0'; g.fillRect(x, y, w, h);
+      g.fillStyle = 'rgba(255,255,255,0.45)';                                   // diagonal glint
+      g.beginPath(); g.moveTo(x, y + h * .55); g.lineTo(x + w * .45, y); g.lineTo(x + w * .7, y); g.lineTo(x, y + h * .9); g.fill();
     }
   }));
   return texCache.get(key);
@@ -384,10 +388,10 @@ const PANTS = [0x263238, 0x3949ab, 0x5d4037, 0x455a64, 0x212121, 0x6d4c41];
 const SKINS = [0xffd2a6, 0xe0a878, 0xa86b45, 0x6b4226, 0xf1c27d];
 const HAIRS = [0x2b1b0e, 0x5a3a1a, 0xd9a441, 0x111111, 0x9e9e9e, 0xc0392b];
 const CAR_COLORS = [0xe53935, 0x1e88e5, 0xfdd835, 0x43a047, 0xf5f5f5, 0x8e24aa, 0xff7043, 0x26c6da];
-const HOUSE_WALLS = [0xf6e3c4, 0xcfe6f5, 0xf5c9c4, 0xdcd4f5, 0xcdeccf, 0xffe2a8, 0xffffff];
-const ROOFS = [0xc0392b, 0x8e44ad, 0x34495e, 0xd35400, 0x16a085, 0x7f8c8d];
-const WALLS = ['#f6e3c4', '#cfe6f5', '#f5c9c4', '#dcd4f5', '#cdeccf', '#ffe2a8', '#e6e6e6', '#f7d6e8'];
-const GLASS = ['#8fc3ea', '#a9cbe6', '#9fb4dc', '#b9e0e0'];
+const HOUSE_WALLS = [0xfff1d6, 0xd6f3ff, 0xffd9d9, 0xe6dcff, 0xdcffe0, 0xfff7b8, 0xffffff];
+const ROOFS = [0xff5d5d, 0x8f6bff, 0x3d7bff, 0xff9233, 0x1fc8a6, 0xff6fb5];
+const WALLS = ['#ffd6a5', '#a0e7ff', '#ffadad', '#cdb4ff', '#b9fbc0', '#fdffb6', '#ffc6ff', '#9bf6ff', '#ffb4a2'];
+const GLASS = ['#7ad3ff', '#8fb9ff', '#b8a6ff', '#6fe0d0', '#ff9fc8'];
 const AWN = [0xe53935, 0x1e88e5, 0x43a047, 0xff9800, 0x8e24aa];
 
 function treeGeo(pine, c) {
@@ -569,49 +573,63 @@ cityGround.rotation.x = -Math.PI / 2; cityGround.receiveShadow = true; scene.add
   const forest = new THREE.Mesh(merge(list), vcMat); scene.add(forest);
 }
 
-function makeGroundTexture(layout) {
-  const S = 2048, k = S / (CITY * 2);
-  const c = document.createElement('canvas'); c.width = c.height = S;
-  const g = c.getContext('2d');
-  const X = v => (v + CITY) * k;
-  g.fillStyle = '#74c04e'; g.fillRect(0, 0, S, S);
-  g.fillStyle = '#50545c';
-  for (const L of ROADS) { g.fillRect(0, X(L - 4), S, 8 * k); g.fillRect(X(L - 4), 0, 8 * k, S); }
-  for (let i = 0; i < 6000; i++) { g.fillStyle = Math.random() < .5 ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.06)'; g.fillRect(Math.random() * S, Math.random() * S, 3, 3); }
-  for (const b of layout) {
-    const { bx, bz, type } = b;
-    g.fillStyle = '#d4cfc4'; g.fillRect(X(bx - 11), X(bz - 11), 22 * k, 22 * k);
-    g.strokeStyle = '#9d978a'; g.lineWidth = 4; g.strokeRect(X(bx - 11) + 2, X(bz - 11) + 2, 22 * k - 4, 22 * k - 4);
-    g.strokeStyle = 'rgba(0,0,0,0.06)'; g.lineWidth = 2;
-    for (let t = -11; t <= 11; t += 1.6) {
-      g.beginPath(); g.moveTo(X(bx + t), X(bz - 11)); g.lineTo(X(bx + t), X(bz + 11)); g.stroke();
-      g.beginPath(); g.moveTo(X(bx - 11), X(bz + t)); g.lineTo(X(bx + 11), X(bz + t)); g.stroke();
-    }
-    const green = type === 'park' || type === 'houses';
-    g.fillStyle = type === 'park' ? '#79c850' : type === 'houses' ? '#86cf5a' : type === 'tower' ? '#efe2c0' : '#e3ddd0';
-    g.fillRect(X(bx - 9), X(bz - 9), 18 * k, 18 * k);
-    if (type === 'park') {
-      g.fillStyle = '#e8d7a8';
-      g.fillRect(X(bx - 9), X(bz - .9), 18 * k, 1.8 * k); g.fillRect(X(bx - .9), X(bz - 9), 1.8 * k, 18 * k);
-      g.beginPath(); g.arc(X(bx), X(bz), 3.2 * k, 0, 7); g.fill();
-    } else if (type === 'houses') {
-      g.fillStyle = '#cfc6b3';
-      for (const [sx, sz] of QUADS) g.fillRect(X(bx + sx * 4.6 - .6), sz > 0 ? X(bz + 6.6) : X(bz - 9), 1.2 * k, 2.4 * k);
-    } else if (!green) {
-      g.strokeStyle = 'rgba(0,0,0,0.07)'; g.lineWidth = 2;
-      for (let t = -9; t <= 9; t += 2) {
-        g.beginPath(); g.moveTo(X(bx + t), X(bz - 9)); g.lineTo(X(bx + t), X(bz + 9)); g.stroke();
-        g.beginPath(); g.moveTo(X(bx - 9), X(bz + t)); g.lineTo(X(bx + 9), X(bz + t)); g.stroke();
-      }
+const GS = 2048, GK = GS / (CITY * 2), GX = v => (v + CITY) * GK;
+let groundCtx = null;
+function drawBlock(g, b) {
+  const { bx, bz, type } = b, k = GK, X = GX;
+  // pavement with a soft curb edge
+  g.fillStyle = '#c9ced6'; g.fillRect(X(bx - 11), X(bz - 11), 22 * k, 22 * k);
+  g.fillStyle = '#eef0f3'; g.fillRect(X(bx - 10.8), X(bz - 10.8), 21.6 * k, 21.6 * k);
+  g.strokeStyle = 'rgba(120,130,150,0.12)'; g.lineWidth = 2;
+  for (let t = -10.8; t <= 10.8; t += 2.16) {
+    g.beginPath(); g.moveTo(X(bx + t), X(bz - 10.8)); g.lineTo(X(bx + t), X(bz + 10.8)); g.stroke();
+    g.beginPath(); g.moveTo(X(bx - 10.8), X(bz + t)); g.lineTo(X(bx + 10.8), X(bz + t)); g.stroke();
+  }
+  const lot = { park: '#8ddc5c', houses: '#9be36a', tower: '#ffe9b0', downtown: '#dfe6f0', shops: '#e9e3f5' }[type];
+  g.fillStyle = 'rgba(0,0,0,0.08)'; g.fillRect(X(bx - 9), X(bz - 9) + 6, 18 * k, 18 * k);   // tiny drop edge
+  g.fillStyle = lot; g.fillRect(X(bx - 9), X(bz - 9), 18 * k, 18 * k);
+  if (type === 'park') {
+    g.fillStyle = '#f6e3b4';
+    g.fillRect(X(bx - 9), X(bz - .9), 18 * k, 1.8 * k); g.fillRect(X(bx - .9), X(bz - 9), 1.8 * k, 18 * k);
+    g.beginPath(); g.arc(X(bx), X(bz), 3.2 * k, 0, 7); g.fill();
+    g.fillStyle = 'rgba(255,255,255,0.18)';
+    for (let i = 0; i < 40; i++) { g.beginPath(); g.arc(X(bx + rand(-8.5, 8.5)), X(bz + rand(-8.5, 8.5)), rand(4, 10), 0, 7); g.fill(); }
+  } else if (type === 'houses') {
+    g.fillStyle = '#f6e3b4';
+    for (const [sx, sz] of QUADS) g.fillRect(X(bx + sx * 4.6 - .6), sz > 0 ? X(bz + 6.6) : X(bz - 9), 1.2 * k, 2.4 * k);
+    g.strokeStyle = '#ffffff'; g.lineWidth = 5; g.setLineDash([10, 8]);
+    g.beginPath(); g.moveTo(X(bx), X(bz - 9)); g.lineTo(X(bx), X(bz + 9)); g.moveTo(X(bx - 9), X(bz)); g.lineTo(X(bx + 9), X(bz)); g.stroke();
+    g.setLineDash([]);
+  } else {
+    g.strokeStyle = 'rgba(255,255,255,0.7)'; g.lineWidth = 3;
+    for (let t = -9; t <= 9; t += 3) {
+      g.beginPath(); g.moveTo(X(bx + t), X(bz - 9)); g.lineTo(X(bx + t), X(bz + 9)); g.stroke();
+      g.beginPath(); g.moveTo(X(bx - 9), X(bz + t)); g.lineTo(X(bx + 9), X(bz + t)); g.stroke();
     }
   }
-  g.fillStyle = '#ffd23f';
+}
+function makeGroundTexture(layout) {
+  const S = GS, k = GK, X = GX;
+  const c = document.createElement('canvas'); c.width = c.height = S;
+  const g = c.getContext('2d'); groundCtx = g;
+  g.fillStyle = '#86d65e'; g.fillRect(0, 0, S, S);
+  g.fillStyle = '#69707e';
+  for (const L of ROADS) { g.fillRect(0, X(L - 4), S, 8 * k); g.fillRect(X(L - 4), 0, 8 * k, S); }
+  // white edge lines along every road, broken at junctions
+  g.fillStyle = 'rgba(255,255,255,0.8)';
+  for (const L of ROADS) for (const e of [-3.5, 3.5]) for (let t = -80; t < 80; t += 1) {
+    if (ROADS.some(R => Math.abs(t + .5 - R) < 4.6)) continue;
+    g.fillRect(X(t), X(L + e) - .08 * k, 1.02 * k, .16 * k);
+    g.fillRect(X(L + e) - .08 * k, X(t), .16 * k, 1.02 * k);
+  }
+  for (const b of layout) drawBlock(g, b);
+  g.fillStyle = '#ffffff';
   for (const L of ROADS) for (let t = -80; t < 80; t += 4) {
     if (ROADS.some(R => Math.abs(t + 1 - R) < 5.5)) continue;
-    g.fillRect(X(t), X(L) - .12 * k, 2 * k, .24 * k);
-    g.fillRect(X(L) - .12 * k, X(t), .24 * k, 2 * k);
+    g.fillRect(X(t), X(L) - .13 * k, 2.2 * k, .26 * k);
+    g.fillRect(X(L) - .13 * k, X(t), .26 * k, 2.2 * k);
   }
-  g.fillStyle = 'rgba(255,255,255,0.85)';
+  g.fillStyle = 'rgba(255,255,255,0.92)';
   for (const rx of ROADS) for (const rz of ROADS) for (const s of [-1, 1]) {
     for (let w = -3.4; w < 3.5; w += 1) {
       if (Math.abs(rx + s * 5.4) < 79) g.fillRect(X(rx + s * 5.4 - .7), X(rz + w), 1.4 * k, .55 * k);
@@ -627,6 +645,10 @@ function makeGroundTexture(layout) {
 /* ---------------- world objects ---------------- */
 let objects = [];
 let needsClean = false;
+let layout = [];          // the 25 city blocks
+let curBlock = null;      // block being filled (objects get tagged with it)
+let popIn = false;        // new objects grow in with a bounce (rebuilt blocks, returning traffic)
+let vehicleQueue = [];    // eaten vehicles come back after a while
 
 function spawn(kind, x, z, rotY = 0, move = null) {
   const d = DEF[kind];
@@ -635,7 +657,11 @@ function spawn(kind, x, z, rotY = 0, move = null) {
   grp.position.set(x, 0, z); grp.rotation.y = rotY;
   scene.add(grp);
   const o = { kind, grp, x, z, r: d.r, h: meta.h ?? d.h, pts: meta.pts ?? d.pts, label: d.label, color: d.color,
-    gold: false, state: 'idle', move, owner: null, wob: 0, wax: 1, waz: 0, baseQ: grp.quaternion.clone() };
+    gold: false, state: 'idle', move, owner: null, wob: 0, wax: 1, waz: 0, baseQ: grp.quaternion.clone(), grow: 1,
+    block: curBlock, bgen: curBlock ? curBlock.gen : 0 };
+  if (curBlock) { curBlock.total++; curBlock.left++; }
+  if (popIn) { o.grow = -rand(0, .7); grp.scale.setScalar(.001); }
+  if (GOLDABLE.has(kind) && Math.random() < .06) makeGold(o);
   objects.push(o);
   return o;
 }
@@ -646,6 +672,8 @@ function makeGold(o) {
 function removeObj(o) {
   scene.remove(o.grp);
   o.grp.traverse(m => { if (m.userData.own && m.geometry) m.geometry.dispose(); });
+  if (o.block && o.bgen === o.block.gen) o.block.left--;
+  if (o.vehicle) vehicleQueue.push({ t: rand(8, 15) });
   o.state = 'gone';
   needsClean = true;
 }
@@ -739,15 +767,59 @@ function fillBlock(b) {
   }
 }
 
+// Later in the round, rebuilt blocks lean toward bigger buildings so there's always something worth eating.
+function blockType(ring, prog = 0) {
+  if (ring === 0) return 'tower';
+  const r = Math.random();
+  if (ring === 1) return r < .5 + prog * .3 ? 'downtown' : r < .9 ? 'shops' : 'park';
+  return r < .2 * prog ? 'downtown' : r < .45 - prog * .2 ? 'houses' : r < .7 - prog * .2 ? 'park' : 'shops';
+}
+function fillTagged(b) {
+  b.gen = (b.gen || 0) + 1; b.total = 0; b.left = 0; b.emptyT = 0;
+  curBlock = b; fillBlock(b); curBlock = null;
+}
+function spawnVehicle(edge) {
+  const L = pick(ROADS), axis = pick(['x', 'z']), dir = pick([1, -1]);
+  const t = edge ? -dir * 84 : rand(-84, 84), lane = L + (dir > 0 ? -2 : 2);
+  const kind = Math.random() < .18 ? 'bus' : 'car';
+  const move = { type: 'lane', axis, dir, speed: rand(4, 7.5) };
+  const o = axis === 'x' ? spawn(kind, t, lane, dir > 0 ? 0 : Math.PI, move)
+                         : spawn(kind, lane, t, dir > 0 ? -Math.PI / 2 : Math.PI / 2, move);
+  o.vehicle = true;
+  return o;
+}
+function rebuildBlock(b) {
+  for (const o of objects) if (o.block === b && o.state === 'idle') removeObj(o);
+  b.type = blockType(b.ring, clamp((ROUND_TIME - timeLeft) / ROUND_TIME, 0, 1));
+  drawBlock(groundCtx, b); groundMat.map.needsUpdate = true;
+  popIn = true; fillTagged(b); popIn = false;
+  for (let i = 0; i < 24; i++) emit(b.bx + rand(-10, 10), .3, b.bz + rand(-10, 10), rand(-1, 1), rand(2, 5), rand(-1, 1), 0xffffff, rand(.6, 1.2), rand(.5, 1), 4);
+}
+let blockT = 0;
+function updateCity(dt) {
+  // eaten traffic drives back in from the edge of the map
+  vehicleQueue = vehicleQueue.filter(v => {
+    v.t -= dt;
+    if (v.t > 0) return true;
+    popIn = true; spawnVehicle(true); popIn = false;
+    return false;
+  });
+  // a block that's mostly been eaten gets rebuilt once no hole is standing in it
+  blockT -= dt; if (blockT > 0) return; blockT = 1;
+  for (const b of layout) {
+    if (b.left > b.total * .3) { b.emptyT = 0; continue; }
+    b.emptyT += 1;
+    if (b.emptyT < 12) continue;
+    if (holes.some(h => (h.alive || h.dying) && Math.max(Math.abs(h.x - b.bx), Math.abs(h.z - b.bz)) < 13 + h.R)) continue;
+    rebuildBlock(b);
+  }
+}
+
 function genCity() {
-  const layout = [];
+  layout = [];
   BLOCKS.forEach((bx, i) => BLOCKS.forEach((bz, j) => {
     const ring = Math.max(Math.abs(i - 2), Math.abs(j - 2));
-    let type;
-    if (ring === 0) type = 'tower';
-    else if (ring === 1) type = Math.random() < .5 ? 'downtown' : (Math.random() < .8 ? 'shops' : 'park');
-    else { const r = Math.random(); type = r < .45 ? 'houses' : r < .7 ? 'park' : 'shops'; }
-    layout.push({ bx, bz, type });
+    layout.push({ bx, bz, ring, type: blockType(ring) });
   }));
   let parks = layout.filter(b => b.type === 'park').length;
   while (parks < 3) { const b = pick(layout.filter(b => b.type === 'houses' || b.type === 'shops')); b.type = 'park'; parks++; }
@@ -756,7 +828,8 @@ function genCity() {
   if (groundMat.map) groundMat.map.dispose();
   groundMat.map = makeGroundTexture(layout); groundMat.needsUpdate = true;
 
-  layout.forEach(fillBlock);
+  layout.forEach(fillTagged);
+  vehicleQueue = [];
 
   // cones on the roads
   for (let i = 0; i < 36; i++) {
@@ -771,11 +844,11 @@ function genCity() {
       const lane = L + (dir > 0 ? -2 : 2);
       const kind = Math.random() < .18 ? 'bus' : 'car';
       const move = { type: 'lane', axis, dir, speed };
-      if (axis === 'x') spawn(kind, t, lane, dir > 0 ? 0 : Math.PI, move);
-      else spawn(kind, lane, t, dir > 0 ? -Math.PI / 2 : Math.PI / 2, move);
+      const o = axis === 'x' ? spawn(kind, t, lane, dir > 0 ? 0 : Math.PI, move)
+                             : spawn(kind, lane, t, dir > 0 ? -Math.PI / 2 : Math.PI / 2, move);
+      o.vehicle = true;
     }
   }
-  for (const o of objects) if (GOLDABLE.has(o.kind) && Math.random() < .06) makeGold(o);
 }
 
 /* ---------------- holes ---------------- */
@@ -824,7 +897,7 @@ const holes = HOLE_DEFS.map((def, i) => {
   tag.style.background = css; tag.textContent = def.name; $('tags').appendChild(tag);
   return { i, name: def.name, baseColor: new THREE.Color(def.color), css, isPlayer: !!def.player, grp, tm, rimMat, rim, mag, tag,
     x: 0, z: 0, vx: 0, vz: 0, R: LEVELS[0].R, level: 0, growth: 0, score: 0, alive: true, dying: false,
-    respawnT: 0, frozenT: 0, speedT: 0, magnetT: 0, shield: 0, spd: rand(.76, .84), caution: rand(.6, .95), lazy: rand(.15, .3),
+    respawnT: 0, frozenT: 0, speedT: 0, magnetT: 0, shield: 0, spd: rand(.8, .88), caution: rand(.6, .95), lazy: rand(.15, .28),
     aiT: 0, mode: 'wander', target: null, tk: null, wx: 0, wz: 0, fx: 0, fz: 0, chkT: 0, cx: 0, cz: 0, stuckT: 0, sdx: 0, sdz: 0 };
 });
 const player = holes[0];
@@ -837,12 +910,14 @@ function targetRadius(h) {
 function resetHoles() {
   holes.forEach((h, i) => {
     h.x = START_POS[i][0]; h.z = START_POS[i][1]; h.vx = h.vz = 0;
-    h.level = 0; h.growth = 0; h.score = 0; h.R = LEVELS[0].R;
+    h.level = 0; h.growth = 0; h.keep = 0; h.score = 0; h.R = LEVELS[0].R;
     h.alive = true; h.dying = false; h.frozenT = h.speedT = h.magnetT = 0; h.shield = 0;
     h.aiT = 0; h.stuckT = 0; h.grp.visible = true;
   });
 }
 function addPoints(h, pts) {
+  // catch-up: any hole under half the leader's size earns 1.5x, so nobody runs away with a 10-minute round
+  if (state === 'play' && h.growth < .5 * Math.max(...holes.map(o => o.growth))) pts = Math.round(pts * 1.5);
   h.score += pts; h.growth += pts;
   while (h.level < LEVELS.length - 1 && h.growth >= LEVELS[h.level + 1].need) { h.level++; onLevelUp(h); }
 }
@@ -863,7 +938,9 @@ function respawnHole(h) {
     if (d > 30) break;
   }
   h.x = best[0]; h.z = best[1]; h.vx = h.vz = 0;
-  h.R = LEVELS[0].R; h.level = 0; h.growth = 0;
+  h.growth = h.keep || 0; h.keep = 0; h.level = 0;
+  while (h.level < LEVELS.length - 1 && h.growth >= LEVELS[h.level + 1].need) h.level++;
+  h.R = targetRadius(h);   // comes back with some of its size (rounds are long)
   h.alive = true; h.dying = false; h.shield = 2.5; h.grp.visible = true; h.aiT = 0;
   ringFX(h.x, h.z, 1, h.baseColor);
   if (h.isPlayer && state === 'play') banner('BACK IN THE GAME!', '#c3a6ff', 1.4);
@@ -873,7 +950,7 @@ function eatHole(a, b) {
   for (const o of objects) if (o.state === 'fall' && o.owner === b) removeObj(o);
   const pts = 25 + Math.floor(b.growth * 0.4);
   addPoints(a, pts);
-  b.growth = 0; b.level = 0; b.speedT = b.magnetT = b.frozenT = 0;
+  b.keep = Math.floor(b.growth * .4); b.growth = 0; b.level = 0; b.speedT = b.magnetT = b.frozenT = 0;
   burst(b.x, .4, b.z, b.baseColor.getHex(), 45, 8, .6);
   if (a.isPlayer && state === 'play') {
     popup(b.x, 1, b.z, `+${pts} GULP!`, 'big');
@@ -1251,6 +1328,7 @@ function startFall(o, h) {
   o.spin = rand(-1.5, 1.5); o.spinA = 0;
   if (o.move) o.baseQ.setFromAxisAngle(UP, o.grp.rotation.y);
   o.move = null;
+  o.grow = 1; o.grp.scale.setScalar(1);
 }
 function finishEat(o, h) {
   removeObj(o);
@@ -1286,6 +1364,11 @@ function updateObjects(dt, time) {
   for (const o of objects) {
     if (o.state === 'fall') { updateFall(o, dt); continue; }
     if (o.state !== 'idle') continue;
+    if (o.grow < 1) {   // springy pop-in for newly built things
+      o.grow = Math.min(1, o.grow + dt * 1.8);
+      const t = Math.max(0, o.grow) - 1;
+      o.grp.scale.setScalar(Math.max(.001, 1 + 2.7 * t * t * t + 1.7 * t * t));
+    }
     if (o.move) moveObj(o, dt, time);
     let wob = 0;
     for (const h of holes) {
@@ -1344,9 +1427,9 @@ function updateHoles(dt, time) {
     let [mx, mz] = (h.isPlayer && state === 'play') ? inputDir() : aiDir(h, dt);
     if (h.frozenT > 0) { h.frozenT -= dt; mx = mz = 0; if (Math.random() < .3) emit(h.x + rand(-h.R, h.R), 1.5, h.z + rand(-h.R, h.R), 0, -1, 0, 0xffffff, .25, 1, 1); }
     h.speedT = Math.max(0, h.speedT - dt); h.magnetT = Math.max(0, h.magnetT - dt); h.shield = Math.max(0, h.shield - dt);
-    const sp = (6.5 + h.R * 1.5) * (h.speedT > 0 ? 1.7 : 1) * (h.isPlayer && state === 'play' ? 1 : h.spd);
-    const k = 1 - Math.exp(-dt * 10);
-    h.vx += (mx * sp - h.vx) * k; h.vz += (mz * sp - h.vz) * k;
+    const sp = (9.5 + h.R * 1.7) * (h.speedT > 0 ? 1.6 : 1) * (h.isPlayer && state === 'play' ? 1 : h.spd);
+    const k2 = 1 - Math.exp(-dt * 16);   // snappy steering
+    h.vx += (mx * sp - h.vx) * k2; h.vz += (mz * sp - h.vz) * k2;
     h.x = clamp(h.x + h.vx * dt, -HALF, HALF); h.z = clamp(h.z + h.vz * dt, -HALF, HALF);
     h.R += (targetRadius(h) - h.R) * (1 - Math.exp(-dt * 3));
     if (h.speedT > 0 && Math.hypot(h.vx, h.vz) > 1) {
@@ -1390,16 +1473,18 @@ const SKY_DAY = new THREE.Color(0x8fd8ff), SKY_SET = new THREE.Color(0xff9f78), 
 const SUN_DAY = new THREE.Color(0xfff6e5), SUN_SET = new THREE.Color(0xff9a55), MOON = new THREE.Color(0x8fa8ff);
 const HEMI_DAY = new THREE.Color(0xe8f6ff), HEMI_NIGHT = new THREE.Color(0x5464a8);
 let night = 0, lampLevel = 0, lampOn = false, flickerT = 0, dayIcon = '☀️';
+// p = position in one day (0 morning … .6 sunset … .75–.88 night … 1 dawn → loops back to morning)
 function setDay(p, dt) {
-  const set = smooth(.4, .6, p) * (1 - smooth(.68, .85, p));
-  night = smooth(.6, .85, p);
+  const dawn = smooth(.88, 1, p);
+  const set = smooth(.4, .6, p) * (1 - smooth(.68, .85, p)) + smooth(.88, .94, p) * (1 - dawn) * .7;
+  night = smooth(.6, .85, p) * (1 - dawn);
   skyCol.copy(SKY_DAY).lerp(SKY_SET, set).lerp(SKY_NIGHT, night);
   sun.color.copy(SUN_DAY).lerp(SUN_SET, set).lerp(MOON, night);
-  sun.intensity = lerp(2.3, .6, night) * (1 - set * .2);
+  sun.intensity = lerp(1.9, .55, night) * (1 - set * .2);
   hemi.color.copy(HEMI_DAY).lerp(SKY_SET, set * .4).lerp(HEMI_NIGHT, night);
-  hemi.intensity = lerp(1.5, .85, night);
-  const az = lerp(-.9, 1.5, p);
-  const el = lerp(lerp(1.1, .32, smooth(.2, .68, p)), .95, night);
+  hemi.intensity = lerp(1.9, .95, night);
+  const az = p < .85 ? lerp(-.9, 1.5, p / .85) : lerp(1.5, -.9, (p - .85) / .15);
+  const el = lerp(lerp(1.1, .32, smooth(.2, .68, p) * (1 - dawn)), .95, night);
   sunDir.set(Math.cos(el) * Math.cos(az), Math.sin(el), Math.cos(el) * Math.sin(az)).normalize();
   dayIcon = night > .5 ? '🌙' : set > .4 ? '🌇' : '☀️';
   const want = night > .3;
@@ -1529,12 +1614,13 @@ function frame() {
     if (t <= 10 && t !== lastTick && t > 0) { lastTick = t; sfx.tick(); }
     if (timeLeft <= 0) { timeLeft = 0; endGame(); }
   }
-  setDay(state === 'menu' ? .55 + .35 * Math.sin(time * .08) : 1 - timeLeft / ROUND_TIME, dt);
+  setDay(state === 'menu' ? .55 + .35 * Math.sin(time * .08) : ((ROUND_TIME - timeLeft) / 300) % 1, dt);  // two days per round
   if (sim) {
     updateHoles(dt, time);
     updateObjects(dt, time);
     holeVsHole();
     updatePU(dt, time);
+    updateCity(dt);
     sparkT -= dt;
     if (sparkT <= 0) {
       sparkT = .05;
