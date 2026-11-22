@@ -40,7 +40,7 @@ canvas{display:block;touch-action:none}
 #canEat{font-size:12px;margin-top:5px;opacity:.85}
 #timer{position:absolute;top:calc(12px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);font-size:34px;font-weight:900;padding:6px 20px;text-align:center}
 #timer small{display:block;font-size:13px;opacity:.85;letter-spacing:1px}
-#board{position:absolute;top:calc(12px + env(safe-area-inset-top));right:calc(12px + env(safe-area-inset-right));min-width:215px}
+#board{position:absolute;top:calc(68px + env(safe-area-inset-top));right:calc(12px + env(safe-area-inset-right));min-width:215px}
 #board .ttl{font-size:12px;opacity:.75;letter-spacing:1px;margin-bottom:3px}
 .row{display:flex;align-items:center;gap:8px;font-size:15px;padding:3px 0;font-weight:700}
 .row.me{color:#ffe66d}
@@ -101,6 +101,21 @@ canvas{display:block;touch-action:none}
   box-shadow:0 3px 0 rgba(0,0,0,.3);transition:transform .1s}
 .sw.on{border-color:#ffe66d;transform:scale(1.22);box-shadow:0 0 0 3px #2a1a5e,0 0 12px #ffe66d}
 .sw.taken{opacity:.2;pointer-events:none}
+#killBtn{position:absolute;top:calc(12px + env(safe-area-inset-top));right:calc(12px + env(safe-area-inset-right));pointer-events:auto;
+  font:inherit;font-size:18px;font-weight:900;padding:9px 18px;border-radius:999px;border:3px solid #fff;cursor:pointer;color:#fff;
+  background:linear-gradient(#ff5d5d,#c62828);box-shadow:0 5px 0 #7f1515,0 8px 16px rgba(0,0,0,.35);text-shadow:0 2px 0 rgba(0,0,0,.35)}
+#killBtn:active{transform:translateY(3px);box-shadow:0 2px 0 #7f1515}
+#killBtn:disabled{filter:grayscale(1);opacity:.6;pointer-events:none}
+#killPanel{position:absolute;top:calc(68px + env(safe-area-inset-top));right:calc(12px + env(safe-area-inset-right));z-index:6;pointer-events:auto;
+  min-width:250px;max-height:70vh;overflow:auto;background:rgba(40,10,20,.88);border-color:#ff6b6b}
+#killPanel .ttl{font-size:13px;font-weight:900;letter-spacing:1px;color:#ffb3b3;margin-bottom:6px;display:flex;justify-content:space-between;gap:10px}
+#killClose{font:inherit;background:none;border:none;color:#fff;font-size:18px;cursor:pointer}
+.kname{display:flex;align-items:center;gap:9px;width:100%;font:inherit;font-size:17px;font-weight:900;color:#fff;cursor:pointer;
+  background:rgba(255,255,255,.08);border:2px solid rgba(255,255,255,.2);border-radius:12px;padding:8px 10px;margin:4px 0;text-align:left}
+.kname:active{background:rgba(255,80,80,.5)}
+.kname .dot{width:14px;height:14px;border-radius:50%;border:2px solid #fff;flex:none}
+.kname small{margin-left:auto;opacity:.75;font-size:13px}
+.kname:disabled{opacity:.4;pointer-events:none}
 #ask{position:fixed;inset:0;z-index:30;display:flex;align-items:center;justify-content:center;background:rgba(10,5,30,.6)}
 #ask .box{background:#2a1a5e;border:3px solid #ffe66d;border-radius:22px;padding:22px 30px;text-align:center;color:#fff;display:flex;flex-direction:column;gap:16px;
   box-shadow:0 14px 40px rgba(0,0,0,.5);max-width:92vw}
@@ -127,6 +142,8 @@ canvas{display:block;touch-action:none}
     <div id="canEat"></div>
   </div>
   <div id="timer" class="panel">2:00</div>
+  <button id="killBtn">💀 KILL ×3</button>
+  <div id="killPanel" class="panel hidden"><div class="ttl"><span>TAP A NAME TO KILL THEM</span><button id="killClose">✖</button></div><div id="killList"></div></div>
   <div id="board" class="panel"><div class="ttl">LEADERBOARD</div><div id="rows"></div></div>
   <div id="chips"></div>
   <div id="banner"></div>
@@ -1092,6 +1109,15 @@ function respawnHole(h) {
   ringFX(h.x, h.z, 1, h.baseColor);
   if (h.isPlayer && state === 'play') banner('BACK! 🛡️ SAFE + ⚡ 2× SPEED FOR 10s', '#c3a6ff', 2.2);
 }
+// zapped by a KILL: the hole shrinks away where it stands, then respawns like after a gulp
+function killHole(b, byName) {
+  b.alive = false; b.dying = true; b.dieT = 0; b.dieR = b.R; b.eater = b; b.respawnT = 3;
+  for (const o of objects) if (o.state === 'fall' && o.owner === b) removeObj(o);
+  if (!b.remote) { b.keep = Math.floor(b.growth * .4); b.growth = 0; b.level = 0; }
+  b.speedT = b.magnetT = b.frozenT = 0; b.boostT = 0;
+  burst(b.x, .4, b.z, 0xff3b3b, 50, 9, .6); ringFX(b.x, b.z, Math.max(1, b.dieR), 0xff3b3b);
+  if (b.isPlayer && state === 'play') { banner(`💀 KILLED by ${byName}! Respawning…`, '#ff6b6b', 2.6); sfx.gulped(); shake = Math.max(shake, 1.3); }
+}
 // a swallows b. Returns the points it was worth. In multiplayer the victim decides (it's the one that knows where it really is).
 function eatHole(a, b, pts) {
   if (pts == null) pts = 25 + Math.floor(b.growth * 0.4);
@@ -1937,15 +1963,16 @@ function startGame(opts = {}) {
   resetHoles(startsFor(holes.length));
   gameT = 0; clk = 0; refillT = REFILL_TIME; earlyRefillT = 5; puTimer = 3; puSeq = 0; shake = 0; giantFade = 1;
   stats.biggest = null; stats.eaten = 0; stats.gulped = 0;
+  killsLeft = KILLS; killsBy = new Map(); toggleKillPanel(false);
   camBase.set(player.x, 30, player.z + 30); camLook.set(player.x, 0, player.z);
   state = 'play';
-  only('hud', 'quit'); $('quit').textContent = '🏁 END';
+  only('hud', 'quit'); $('quit').textContent = '🏁 END'; updKillBtn();
   updHUD(); drawMini(0);
   banner(`🏙️ TOWN 1 of ${TOWNS} — GULP!`, '#ffe66d', 1.6); sfx.start();
 }
 function endGame(reason, winnerName) {
   if (state !== 'play') return;
-  state = 'over'; overLock = true;
+  state = 'over'; overLock = true; toggleKillPanel(false);
   touch.active = false; $('joy').classList.add('hidden');
   sfx.end();
   if (reason !== 'quit') lastGame = null;   // finished games can't be spectated
@@ -1988,6 +2015,67 @@ $('quit').addEventListener('click', e => {
   e.stopPropagation();
   if (net.spec) toMenu(); else if (state === 'play') endGame('quit');
 });
+
+/* ---------------- kill button ----------------
+   3 kills per game: tap 💀, tap a name, they're gone (they respawn shortly after, like being gulped). */
+const KILLS = 3;
+let killsLeft = KILLS, killsBy = new Map();
+const holeDead = h => h.remote ? !h.netAlive : !h.alive;
+function updKillBtn() {
+  $('killBtn').textContent = killsLeft > 0 ? `💀 KILL ×${killsLeft}` : '💀 NO KILLS LEFT';
+  $('killBtn').disabled = killsLeft <= 0;
+  $('killBtn').classList.toggle('hidden', !!net.spec);
+}
+function renderKillList() {
+  const others = holes.filter(h => !h.isPlayer);
+  $('killList').innerHTML = others.length ? others.map((h, i) => {
+    const dead = holeDead(h), shielded = !dead && h.shield > 0;
+    return `<button class="kname" data-i="${i}" ${dead ? 'disabled' : ''}><span class="dot" style="background:${h.css}"></span>` +
+      `${h.name.replace(/[<>&]/g, '')}<small>${dead ? '💀 dead' : shielded ? '🛡️ protected' : '🏙' + townOf(h)}</small></button>`;
+  }).join('') : '<div style="padding:6px">Nobody else is here!</div>';
+  $('killList').onclick = e => {
+    const b = e.target.closest('.kname'); if (!b) return;
+    doKill(others[+b.dataset.i]);
+  };
+}
+function toggleKillPanel(open = $('killPanel').classList.contains('hidden')) {
+  if (open && (killsLeft <= 0 || state !== 'play' || net.spec)) open = false;
+  $('killPanel').classList.toggle('hidden', !open);
+  if (open) renderKillList();
+}
+function doKill(h) {
+  if (!h || h.isPlayer || killsLeft <= 0 || state !== 'play' || net.spec || !holes.includes(h)) return;
+  if (holeDead(h)) { banner(`${h.name} is already dead!`, '#ffb3b3', 1.2); renderKillList(); return; }
+  if (h.shield > 0) { banner(`🛡️ ${h.name} is protected right now!`, '#9be7ff', 1.4); renderKillList(); return; }
+  killsLeft--;
+  if (h.remote) {
+    netSend('kill', { t: h.pid });
+    if (h.alive) killHole(h, 'YOU');
+  } else killHole(h, 'YOU');
+  banner(`💀 You killed ${h.name}! (${killsLeft} left)`, '#ff6b6b', 1.8);
+  sfx.holeEat(); shake = Math.max(shake, .6);
+  updKillBtn(); toggleKillPanel(false);
+}
+// multiplayer: the target hears about it and kills itself (only 3 per attacker are accepted)
+function onKill(d, { peerId }) {
+  if (!d || d.t !== net.myId || net.spec || state !== 'play' || !player.alive || player.shield > 0) return;
+  const n = killsBy.get(peerId) || 0; if (n >= KILLS) return;
+  killsBy.set(peerId, n + 1);
+  const k = holeByPid(peerId);
+  killHole(player, k ? k.name : 'someone');
+  player.lv++;
+  netSend('died', { lv: player.lv, by: peerId });
+  netState();
+}
+function onDied(d, { peerId }) {
+  const v = holeByPid(peerId); if (!v || !d) return;
+  v.lv = Math.max(v.lv, d.lv | 0); v.netAlive = false;
+  const killer = d.by === net.myId ? 'YOU' : (holeByPid(d.by) || {}).name || 'someone';
+  if (v.alive) killHole(v, killer);
+  if (killer !== 'YOU') banner(`💀 ${v.name} was killed by ${killer}`, '#ffb3b3', 1.4);
+}
+$('killBtn').addEventListener('click', e => { e.stopPropagation(); toggleKillPanel(); });
+$('killClose').addEventListener('click', e => { e.stopPropagation(); toggleKillPanel(false); });
 
 /* ---------------- multiplayer ----------------
    Peer-to-peer over WebRTC using Trystero (public relays only help players find each other; game data goes browser to browser).
@@ -2125,7 +2213,9 @@ async function joinGameRoom(code, host, hostName) {
   renderLobby();
 }
 function wireRoom(room, code) {
-  for (const n of ['hi', 'roster', 'full', 'start', 'st', 'gulp', 'pu', 'pick', 'end', 'snap', 'refill', 'col']) net.A[n] = room.makeAction(n);
+  for (const n of ['hi', 'roster', 'full', 'start', 'st', 'gulp', 'pu', 'pick', 'end', 'snap', 'refill', 'col', 'kill', 'died']) net.A[n] = room.makeAction(n);
+  net.A.kill.onMessage(onKill);
+  net.A.died.onMessage(onDied);
   net.A.hi.onMessage((d, { peerId }) => onHi(d, peerId));
   net.A.snap.onMessage(d => onSnap(d));
   net.A.roster.onMessage((d, { peerId }) => { if (peerId === net.hostPeer && Array.isArray(d)) { net.roster = d; renderLobby(); } });
@@ -2342,7 +2432,7 @@ function beginSpectate(d) {
   state = 'play';
   loadTown(player.town);
   camBase.set(player.x, 30, player.z + 30); camLook.set(player.x, 0, player.z);
-  only('hud', 'quit');
+  only('hud', 'quit'); toggleKillPanel(false); updKillBtn();
   $('quit').textContent = '🚪 LEAVE';
   updHUD(); drawMini(0);
   banner(`👀 SPECTATING ${player.name}`, '#9be7ff', 2);
@@ -2433,7 +2523,7 @@ function frame() {
   updatePops(dt);
   updateTags();
   hudT -= dt;
-  if (state === 'play' && hudT <= 0) { hudT = .15; updHUD(); }
+  if (state === 'play' && hudT <= 0) { hudT = .15; updHUD(); if (!$('killPanel').classList.contains('hidden') && Math.random() < .2) renderKillList(); }
   miniT -= dt;
   if (state === 'play' && miniT <= 0) { miniT = .2; drawMini(time); }
   renderer.render(scene, camera);
