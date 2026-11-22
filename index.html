@@ -1427,7 +1427,7 @@ function updateHoles(dt, time) {
     let [mx, mz] = (h.isPlayer && state === 'play') ? inputDir() : aiDir(h, dt);
     if (h.frozenT > 0) { h.frozenT -= dt; mx = mz = 0; if (Math.random() < .3) emit(h.x + rand(-h.R, h.R), 1.5, h.z + rand(-h.R, h.R), 0, -1, 0, 0xffffff, .25, 1, 1); }
     h.speedT = Math.max(0, h.speedT - dt); h.magnetT = Math.max(0, h.magnetT - dt); h.shield = Math.max(0, h.shield - dt);
-    const sp = (9.5 + h.R * 1.7) * (h.speedT > 0 ? 1.6 : 1) * (h.isPlayer && state === 'play' ? 1 : h.spd);
+    const sp = (5.7 + h.R * 1.02) * (h.speedT > 0 ? 1.6 : 1) * (h.isPlayer && state === 'play' ? 1 : h.spd);
     const k2 = 1 - Math.exp(-dt * 16);   // snappy steering
     h.vx += (mx * sp - h.vx) * k2; h.vz += (mz * sp - h.vz) * k2;
     h.x = clamp(h.x + h.vx * dt, -HALF, HALF); h.z = clamp(h.z + h.vz * dt, -HALF, HALF);
