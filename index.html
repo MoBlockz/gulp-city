@@ -97,6 +97,12 @@ canvas{display:block;touch-action:none}
 @keyframes spin{to{transform:rotate(360deg)}}
 .pickrow{display:flex;flex-direction:column;align-items:center;gap:8px;font-weight:900;text-shadow:0 2px 0 #2a1a5e}
 .swatches{display:flex;flex-wrap:wrap;gap:7px;justify-content:center;max-width:min(560px,92vw)}
+.modes{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+.mode{font:inherit;font-size:17px;font-weight:900;padding:8px 16px;border-radius:14px;border:3px solid rgba(255,255,255,.35);cursor:pointer;
+  pointer-events:auto;background:rgba(24,16,52,.7);color:#fff;display:flex;flex-direction:column;align-items:center;min-width:170px}
+.mode small{font-size:11px;opacity:.8;font-weight:700}
+.mode.on{border-color:#ffe66d;background:linear-gradient(#7a4dff,#4b2bb3);box-shadow:0 0 12px rgba(255,230,109,.6)}
+.mode:disabled{cursor:default;opacity:.55}.mode.on:disabled{opacity:1}
 .sw{width:30px;height:30px;border-radius:50%;border:3px solid rgba(255,255,255,.55);cursor:pointer;pointer-events:auto;padding:0;
   box-shadow:0 3px 0 rgba(0,0,0,.3);transition:transform .1s}
 .sw.on{border-color:#ffe66d;transform:scale(1.22);box-shadow:0 0 0 3px #2a1a5e,0 0 12px #ffe66d}
@@ -155,6 +161,7 @@ canvas{display:block;touch-action:none}
 <div id="menu" class="screen">
   <div class="title">GULP<br><span>CITY</span></div>
   <div class="sub">Swallow the town. Grow bigger. Move up 20 towns. Gulp your rivals.</div>
+  <div class="pickrow"><span>Mode:</span><div id="spModes" class="modes"></div></div>
   <div class="pickrow"><span>Your colour:</span><div id="spColors" class="swatches"></div></div>
   <div class="btns">
     <button id="playBtn" class="btn">👤 SINGLE PLAYER</button>
@@ -163,7 +170,8 @@ canvas{display:block;touch-action:none}
   <div class="help">
     <b>WASD / Arrow keys</b> to move &nbsp;·&nbsp; <b>Drag</b> on touch screens<br>
     Eat things smaller than you: cones → people → cars → trees → houses → skyscrapers → the 2000 ft tower<br>
-    Grow big enough and you move up to the next, bigger town. <b>Reach Town 20 to win!</b><br>
+    <b>20 Towns:</b> grow big enough to move up to a bigger town · reach Town 20 to win<br>
+    <b>Classic:</b> one giant city, no levels · the game ends when the whole city is gulped<br>
     🧲 Magnet &nbsp; ⚡ Speed &nbsp; ❄️ Freeze rivals &nbsp; ✨ Golden things = 5× points
   </div>
   <div id="best"></div>
@@ -177,6 +185,7 @@ canvas{display:block;touch-action:none}
       <input id="mpName" maxlength="14" autocomplete="off" spellcheck="false">
       <button id="mpGo" class="btn small">🔎 FIND A GAME</button>
     </div>
+    <div id="mpModeRow" class="pickrow hidden"><span>Mode:</span><div id="mpModes" class="modes"></div></div>
     <div id="mpColorRow" class="pickrow"><span>Your colour:</span><div id="mpColors" class="swatches"></div></div>
     <div id="mpStatus"></div>
     <div id="mpPlayers"></div>
@@ -962,20 +971,32 @@ function spawnVehicle(t, L, axis, dir, speed) {
   return o;
 }
 let bigK = 1;   // building height multiplier for the current town
+// CLASSIC mode's one giant city: downtown around the 2000 ft tower, suburbs and parks toward the edges
+function classicBlockType(ring) {
+  const r = Math.random();
+  if (ring === 0) return 'giant';
+  if (ring === 1) return r < .55 ? 'downtown' : r < .9 ? 'shops' : 'park';
+  if (ring === 2) return r < .3 ? 'downtown' : r < .4 ? 'tower' : r < .72 ? 'shops' : r < .85 ? 'park' : 'houses';
+  if (ring === 3) return r < .1 ? 'downtown' : r < .14 ? 'tower' : r < .42 ? 'shops' : r < .78 ? 'houses' : 'park';
+  return r < .14 ? 'shops' : r < .7 ? 'houses' : 'park';
+}
+// t = 1..20 for the towns, t = 0 for the classic city
 function genTown(t) {
   layout = []; objSeq = 0; objById = new Map(); giantObj = null;
-  bigK = 1 + .7 * (t - 1) / (TOWNS - 1);
+  const classic = t === 0;
+  bigK = classic ? 1 : 1 + .7 * (t - 1) / (TOWNS - 1);
   const C = (NB - 1) / 2;
   BLOCKS.forEach((bx, i) => BLOCKS.forEach((bz, j) => {
     const ring = Math.max(Math.abs(i - C), Math.abs(j - C));
-    layout.push({ bx, bz, ring, type: blockType(ring, t) });
+    layout.push({ bx, bz, ring, type: classic ? classicBlockType(ring) : blockType(ring, t) });
   }));
   const ensure = (type, n, from) => {
     let have = layout.filter(b => b.type === type).length;
     while (have < n) { const c = layout.filter(from); if (!c.length) break; pick(c).type = type; have++; }
   };
-  if (t >= 12) ensure('tower', t >= 16 ? 4 : 2, b => b.type !== 'tower' && b.type !== 'giant' && b.ring >= 1);
-  ensure('park', Math.max(1, Math.round(NB * NB * .1)), b => b.type === 'houses' || b.type === 'shops');
+  if (classic) ensure('tower', 4, b => (b.ring === 2 || b.ring === 3) && b.type !== 'tower');
+  else if (t >= 12) ensure('tower', t >= 16 ? 4 : 2, b => b.type !== 'tower' && b.type !== 'giant' && b.ring >= 1);
+  ensure('park', classic ? 14 : Math.max(1, Math.round(NB * NB * .1)), b => b.type === 'houses' || b.type === 'shops');
 
   makeGroundTexture(layout);
   layout.forEach(fillBlock);
@@ -987,7 +1008,7 @@ function genTown(t) {
   }
   // traffic
   for (const L of ROADS) for (const axis of ['x', 'z']) for (const dir of [1, -1]) {
-    const n = randi(1, Math.max(1, Math.round(NB / 3))), start = rand(-WRAP, WRAP), speed = rand(4, 7.5);
+    const n = classic ? randi(2, 4) : randi(1, Math.max(1, Math.round(NB / 3))), start = rand(-WRAP, WRAP), speed = rand(4, 7.5);
     for (let k = 0; k < n; k++) spawnVehicle(((start + k * (2 * WRAP / n)) + WRAP) % (2 * WRAP) - WRAP, L, axis, dir, speed);
   }
   totalObjs = objects.length;
@@ -1443,7 +1464,7 @@ function aiThink(h) {
     const d = Math.hypot(o.x - h.x, o.z - h.z);
     if (d < 30) { const s = (30 + o.growth * .3) / (d + 4); if (s > bs) { bs = s; best = o; tk = 'hole'; } }
   }
-  const lim = h.R * EAT, far = objects.length < 300 ? 1e9 : 1600;   // sparse town: look across the whole map
+  const lim = frenzy ? 1e9 : h.R * EAT, far = objects.length < 300 ? 1e9 : 1600;   // sparse town: look across the whole map
   for (const o of objects) {
     if (o.state !== 'idle' || o.r > lim) continue;
     const dx = o.x - h.x, dz = o.z - h.z, d2 = dx * dx + dz * dz;
@@ -1561,7 +1582,7 @@ function updateObjects(dt, time) {
     for (const h of holes) {
       if (!h.alive) continue;
       let dx = o.x - h.x, dz = o.z - h.z, d2 = dx * dx + dz * dz;
-      if (o.r <= h.R * EAT) {
+      if (frenzy || o.r <= h.R * EAT) {
         if (h.magnetT > 0) {
           const MR = h.R * 3 + 3;
           if (d2 < MR * MR && d2 > 1e-4) {
@@ -1571,7 +1592,7 @@ function updateObjects(dt, time) {
             dx = o.x - h.x; dz = o.z - h.z; d2 = dx * dx + dz * dz;
           }
         }
-        const lim = h.R - o.r * .4;
+        const lim = o.r > h.R * EAT ? h.R * .75 : h.R - o.r * .4;   // (frenzy: even huge things fall in)
         if (d2 < lim * lim) { startFall(o, h); break; }
         const edge = h.R + o.r * .55;
         if (d2 < edge * edge) {             // teetering on the rim
@@ -1627,7 +1648,7 @@ function updateHoles(dt, time) {
     if (h.frozenT > 0) { h.frozenT -= dt; mx = mz = 0; if (Math.random() < .3) emit(h.x + rand(-h.R, h.R), 1.5, h.z + rand(-h.R, h.R), 0, -1, 0, 0xffffff, .25, 1, 1); }
     h.speedT = Math.max(0, h.speedT - dt); h.magnetT = Math.max(0, h.magnetT - dt); h.shield = Math.max(0, h.shield - dt);
     h.boostT = Math.max(0, (h.boostT || 0) - dt);
-    const sp = holeSpeed(h.R) * (h.speedT > 0 ? 1.6 : 1) * (h.boostT > 0 ? 2 : 1) * (h.isPlayer && state === 'play' ? 1 : h.spd);
+    const sp = holeSpeed(h.R) * (frenzy ? 1.5 : 1) * (h.speedT > 0 ? 1.6 : 1) * (h.boostT > 0 ? 2 : 1) * (h.isPlayer && state === 'play' ? 1 : h.spd);
     const k2 = 1 - Math.exp(-dt * 16);   // snappy steering
     h.vx += (mx * sp - h.vx) * k2; h.vz += (mz * sp - h.vz) * k2;
     h.x = clamp(h.x + h.vx * dt, -HALF, HALF); h.z = clamp(h.z + h.vz * dt, -HALF, HALF);
@@ -1749,17 +1770,19 @@ function updHUD() {
   $('score').textContent = P.score.toLocaleString();
   $('sizeName').textContent = (net.spec ? `👀 ${P.name} · ` : '') + `SIZE ${P.level + 1} · ${L.name}`;
   $('sizeBar').style.width = (N ? clamp((P.growth - L.need) / (N.need - L.need), 0, 1) * 100 : 100) + '%';
-  $('canEat').textContent = net.spec ? 'Spectating · tap or ← → to switch player' : 'Can now eat: ' + L.eats;
+  $('canEat').textContent = net.spec ? 'Spectating · tap or ← → to switch player' : frenzy ? '🔥 FINAL FRENZY: eat anything!' : 'Can now eat: ' + L.eats;
   const pct = Math.floor((1 - objects.length / totalObjs) * 100);
+  const classic = gameMode === 'classic';
   const nextPct = town >= TOWNS ? 100 : Math.floor(clamp((P.growth - townNeed(town)) / (townNeed(town + 1) - townNeed(town)), 0, 1) * 100);
-  $('timer').innerHTML = `🏙️ TOWN ${town}/${TOWNS} · ${dayIcon} ${fmtT(gameT)}<small>NEXT TOWN ${nextPct}% · ${pct}% EATEN · REBUILDS IN ${fmtT(Math.max(0, refillT))}</small>`;
-  const sorted = [...holes].sort((a, b) => townOf(b) - townOf(a) || b.score - a.score);
+  if (classic) $('timer').innerHTML = `${dayIcon} ${fmtT(gameT)}<small>${pct}% OF THE CITY GULPED · ${objects.length.toLocaleString()} LEFT</small>`;
+  else $('timer').innerHTML = `🏙️ TOWN ${town}/${TOWNS} · ${dayIcon} ${fmtT(gameT)}<small>NEXT TOWN ${nextPct}% · ${pct}% EATEN · REBUILDS IN ${fmtT(Math.max(0, refillT))}</small>`;
+  const sorted = [...holes].sort((a, b) => (classic ? 0 : townOf(b) - townOf(a)) || b.score - a.score);
   let show = sorted.slice(0, 6);
   if (!show.includes(P)) show = [...sorted.slice(0, 5), P];
   $('rows').innerHTML = show.map(h => {
     const i = sorted.indexOf(h), tip = h.isPlayer ? '' : canEatHole(P, h) ? ' 🍽️' : canEatHole(h, P) ? ' ⚠️' : '';
     return `<div class="row ${h.isPlayer ? 'me' : ''} ${h.alive ? '' : 'dead'}"><span>${i + 1}.</span><span class="dot" style="background:${h.css}"></span>` +
-      `<span>${h.isPlayer ? 'YOU' : h.name}${h.alive ? '' : ' 💀'}${tip}</span><span class="sc">🏙${townOf(h)} · S${h.level + 1} · ${h.score.toLocaleString()}</span></div>`;
+      `<span>${h.isPlayer ? 'YOU' : h.name}${h.alive ? '' : ' 💀'}${tip}</span><span class="sc">${classic ? '' : '🏙' + townOf(h) + ' · '}S${h.level + 1} · ${h.score.toLocaleString()}</span></div>`;
   }).join('');
   let chips = '';
   if (P.magnetT > 0) chips += `<div class="chip" style="--c:#ff4d4d">🧲 ${P.magnetT.toFixed(1)}</div>`;
@@ -1797,6 +1820,9 @@ function drawMini(time) {
 }
 
 /* ---------------- game flow ---------------- */
+// two ways to play: 'towns' (20 levels, reach Town 20) or 'classic' (one giant city, eat it all)
+let modePref = localStorage.getItem('gulpcity_mode') === 'classic' ? 'classic' : 'towns', gameMode = 'towns', frenzy = false;
+const MODE_NAMES = { towns: '🏙️ 20 TOWNS', classic: '🌆 CLASSIC' };
 let state = 'menu', mode = 'sp', hudT = 0, miniT = 0, lodT = 0, overLock = false, gameT = 0;
 const bestKey = 'gulpcity_best';
 const getBest = () => +(localStorage.getItem(bestKey) || 0);
@@ -1905,7 +1931,15 @@ function isRoomAuthority() {
   let m = net.myId; for (const h of holes) if (h.remote && h.pid < m) m = h.pid;
   return m === net.myId;
 }
+function updateClassic() {
+  // last ~6% of the city: everything becomes edible and everyone speeds up, so every game can finish
+  if (!frenzy && objects.length <= Math.max(25, totalObjs * .06)) {
+    frenzy = true; banner('🔥 FINAL FRENZY! Eat anything, everyone speeds up!', '#ff8bd1', 2.6); sfx.levelUp();
+  }
+  if (objects.length === 0) { if (net.inGame && !net.spec) netSend('end', { classic: 1 }); endGame('eaten'); }
+}
 function updateTowns(dt) {
+  if (gameMode === 'classic') { updateClassic(); return; }
   // every 10 minutes every town is rebuilt (one player decides, so everyone agrees)
   refillT -= dt;
   if (refillT <= 0) {
@@ -1933,6 +1967,13 @@ function renderSwatches(el, mine, taken, onPick) {
     `<button class="sw${i === mine ? ' on' : ''}${taken.has(i) ? ' taken' : ''}" data-i="${i}" style="background:${colorCss(i)}" title="colour ${i + 1}"></button>`).join('');
   el.onclick = e => { const b = e.target.closest('.sw'); if (b && !b.classList.contains('taken')) onPick(+b.dataset.i); };
 }
+function renderModes(el, cur, onPick) {
+  el.innerHTML = Object.keys(MODE_NAMES).map(m =>
+    `<button class="mode${m === cur ? ' on' : ''}" data-m="${m}" ${onPick ? '' : 'disabled'}>${MODE_NAMES[m]}<small>${m === 'towns'
+      ? 'Grow to move up · reach Town 20 to win' : 'One giant city · eat it all'}</small></button>`).join('');
+  el.onclick = e => { const b = e.target.closest('.mode'); if (b && onPick) onPick(b.dataset.m); };
+}
+function showSpModes() { renderModes($('spModes'), modePref, m => { modePref = m; localStorage.setItem('gulpcity_mode', m); showSpModes(); }); }
 function showSpColors() { renderSwatches($('spColors'), myColor, new Set(), i => { setMyColor(i); showSpColors(); recolorMenuPlayer(); }); }
 function recolorMenuPlayer() {
   if (state !== 'menu' || !player) return;
@@ -1959,7 +2000,9 @@ function startGame(opts = {}) {
     setHoles(spDefs());
   }
   holes.forEach(h => { h.town = 1; h.netAlive = true; });
-  loadTown(1);
+  gameMode = opts.mode || modePref; frenzy = false;
+  loadTown(gameMode === 'classic' ? 0 : 1);
+  holes.forEach(h => { h.town = town; });
   resetHoles(startsFor(holes.length));
   gameT = 0; clk = 0; refillT = REFILL_TIME; earlyRefillT = 5; puTimer = 3; puSeq = 0; shake = 0; giantFade = 1;
   stats.biggest = null; stats.eaten = 0; stats.gulped = 0;
@@ -1968,7 +2011,7 @@ function startGame(opts = {}) {
   state = 'play';
   only('hud', 'quit'); $('quit').textContent = '🏁 END'; updKillBtn();
   updHUD(); drawMini(0);
-  banner(`🏙️ TOWN 1 of ${TOWNS} — GULP!`, '#ffe66d', 1.6); sfx.start();
+  banner(gameMode === 'classic' ? 'GULP THE WHOLE CITY!' : `🏙️ TOWN 1 of ${TOWNS} — GULP!`, '#ffe66d', 1.6); sfx.start();
 }
 function endGame(reason, winnerName) {
   if (state !== 'play') return;
@@ -1976,18 +2019,22 @@ function endGame(reason, winnerName) {
   touch.active = false; $('joy').classList.add('hidden');
   sfx.end();
   if (reason !== 'quit') lastGame = null;   // finished games can't be spectated
-  const sorted = [...holes].sort((a, b) => townOf(b) - townOf(a) || b.score - a.score);
+  const classic = gameMode === 'classic';
+  const sorted = [...holes].sort((a, b) => (classic ? 0 : townOf(b) - townOf(a)) || b.score - a.score);
   const watching = !!net.spec;
   const me = watching ? (sorted[0] || null) : player;
   const best = watching ? getBest() : Math.max(getBest(), player.score); localStorage.setItem(bestKey, best);
-  $('overTitle').textContent = reason === 'win' ? 'YOU WIN!' : 'GAME OVER';
+  $('overTitle').textContent = reason === 'win' ? 'YOU WIN!' : reason === 'eaten' ? 'CITY GULPED!' : 'GAME OVER';
+  const rank = sorted.indexOf(player) + 1, top = sorted[0];
   $('rankText').textContent =
-      reason === 'win' ? `🏆 You reached Town ${TOWNS} first!`
+      classic ? (!top ? 'Everyone left the game' : watching ? `🏆 ${top.name} won!`
+        : rank === 1 ? '🏆 #1 — TOP GULPER OF THE CITY!' : `You finished #${rank} of ${holes.length} · ${top.name} won`)
+    : reason === 'win' ? `🏆 You reached Town ${TOWNS} first!`
     : reason === 'lost' ? `🏆 ${winnerName || 'Someone'} reached Town ${TOWNS} and won!`
     : !holes.length ? 'Everyone left the game'
     : `You made it to Town ${town} of ${TOWNS}`;
   $('rScore').textContent = me ? me.score.toLocaleString() : '—';
-  $('rSize').textContent = me ? `${me.level + 1} · ${LEVELS[me.level].name} · Town ${townOf(me)}` : '—';
+  $('rSize').textContent = me ? `${me.level + 1} · ${LEVELS[me.level].name}${classic ? '' : ' · Town ' + townOf(me)}` : '—';
   $('rEaten').textContent = watching ? '—' : stats.eaten.toLocaleString();
   $('rRivals').textContent = stats.gulped;
   $('rBig').textContent = stats.biggest ? stats.biggest.label : '—';
@@ -1999,14 +2046,14 @@ function endGame(reason, winnerName) {
 }
 // the menu shows a big late-game town (with the 2000 ft tower) and AI holes roaming it
 function menuWorld() {
-  mode = 'sp'; baseSeed = (Math.random() * 2 ** 31) >>> 0;
+  mode = 'sp'; gameMode = 'towns'; frenzy = false; baseSeed = (Math.random() * 2 ** 31) >>> 0;
   townEp = new Array(TOWNS + 1).fill(0); eatenBy = new Map();
   setHoles(spDefs()); loadTown(17); resetHoles(startsFor(holes.length));
 }
 function toMenu() {
   netLeaveAll();
   state = 'menu'; menuWorld();
-  only('menu'); showBest(); showSpColors();
+  only('menu'); showBest(); showSpColors(); showSpModes();
 }
 $('playBtn').addEventListener('click', () => startGame());
 $('againBtn').addEventListener('click', () => startGame());
@@ -2031,7 +2078,7 @@ function renderKillList() {
   $('killList').innerHTML = others.length ? others.map((h, i) => {
     const dead = holeDead(h), shielded = !dead && h.shield > 0;
     return `<button class="kname" data-i="${i}" ${dead ? 'disabled' : ''}><span class="dot" style="background:${h.css}"></span>` +
-      `${h.name.replace(/[<>&]/g, '')}<small>${dead ? '💀 dead' : shielded ? '🛡️ protected' : '🏙' + townOf(h)}</small></button>`;
+      `${h.name.replace(/[<>&]/g, '')}<small>${dead ? '💀 dead' : shielded ? '🛡️ protected' : gameMode === 'classic' ? '' : '🏙' + townOf(h)}</small></button>`;
   }).join('') : '<div style="padding:6px">Nobody else is here!</div>';
   $('killList').onclick = e => {
     const b = e.target.closest('.kname'); if (!b) return;
@@ -2085,6 +2132,8 @@ $('killClose').addEventListener('click', e => { e.stopPropagation(); toggleKillP
 const TRYSTERO_URL = 'https://cdn.jsdelivr.net/npm/trystero@0.27.0/+esm';
 const NET_CFG = { appId: 'ty-robb.github.io/gulp-city', identity: 'none' };
 const MAXP = 20;
+// ?lobby=xyz in the URL uses a separate private lobby (for testing without pulling in real players)
+const LOBBY_ROOM = 'lobby-v1' + ((new URLSearchParams(location.search).get('lobby') || '').replace(/[^a-z0-9]/gi, '').slice(0, 16).replace(/^(.)/, '-$1'));
 const net = { lib: null, lobby: null, room: null, myId: null, inGame: false, isHost: false, started: false, myCode: null, gameCode: null,
   name: 'Player', hostName: '', ads: new Map(), declined: new Set(), roster: [], hostPeer: null, prompt: null,
   adTimer: 0, seekTimer: 0, A: {}, LA: {}, stT: 0, eaten: [], createdAt: 0, gen: 0, spec: null, snap: null };
@@ -2102,6 +2151,7 @@ function isPuAuthority() {
 }
 function setStatus(html) { $('mpStatus').innerHTML = html; }
 function mpShow(view) {
+  $('mpModeRow').classList.toggle('hidden', view !== 'lobby');
   $('mpNameRow').classList.toggle('hidden', view !== 'name');
   $('mpColorRow').classList.toggle('hidden', view !== 'name' && view !== 'lobby');
   if (view === 'name') renderSwatches($('mpColors'), myColor, new Set(), i => { setMyColor(i); mpShow('name'); });
@@ -2134,7 +2184,7 @@ async function mpFind() {
   try { net.lib = net.lib || await import(TRYSTERO_URL); }
   catch (e) { if (g === net.gen) setStatus('❌ Couldn\'t load multiplayer. Check your internet and try again.'); return; }
   if (g !== net.gen) return;
-  const lobby = net.lib.joinRoom(NET_CFG, 'lobby-v1');
+  const lobby = net.lib.joinRoom(NET_CFG, LOBBY_ROOM);
   net.lobby = lobby;
   net.LA.ad = lobby.makeAction('ad');
   net.LA.ad.onMessage((d, { peerId }) => {
@@ -2209,11 +2259,12 @@ async function joinGameRoom(code, host, hostName) {
   if (g !== net.gen || net.room !== room) return;
   net.myId = self.peerId;
   wireRoom(room, code);
+  net.lobbyMode = modePref;
   if (host) { net.hostPeer = net.myId; net.roster = [{ id: net.myId, name: net.name, c: myColor }]; sendAd(); }
   renderLobby();
 }
 function wireRoom(room, code) {
-  for (const n of ['hi', 'roster', 'full', 'start', 'st', 'gulp', 'pu', 'pick', 'end', 'snap', 'refill', 'col', 'kill', 'died']) net.A[n] = room.makeAction(n);
+  for (const n of ['hi', 'roster', 'full', 'start', 'st', 'gulp', 'pu', 'pick', 'end', 'snap', 'refill', 'col', 'kill', 'died', 'mode']) net.A[n] = room.makeAction(n);
   net.A.kill.onMessage(onKill);
   net.A.died.onMessage(onDied);
   net.A.hi.onMessage((d, { peerId }) => onHi(d, peerId));
@@ -2228,10 +2279,14 @@ function wireRoom(room, code) {
   net.A.col.onMessage((d, { peerId }) => {   // a guest asks the host for a colour
     if (!net.isHost || state !== 'lobby' || !d) return;
     const p = net.roster.find(q => q.id === peerId); if (!p) return;
-    p.c = freeColor(d.c | 0, peerId); netSend('roster', net.roster); renderLobby();
+    p.c = freeColor(d.c | 0, peerId); sendRoster(); renderLobby();
   });
   net.A.pick.onMessage(onPick);
-  net.A.end.onMessage(d => { if (net.inGame && state === 'play') endGame('lost', d && typeof d.name === 'string' ? d.name.slice(0, 14) : ''); });
+  net.A.end.onMessage(d => {
+    if (!net.inGame || state !== 'play') return;
+    if (gameMode === 'classic') endGame('eaten'); else endGame('lost', d && typeof d.name === 'string' ? d.name.slice(0, 14) : '');
+  });
+  net.A.mode.onMessage((d, { peerId }) => { if (peerId === net.hostPeer && d && MODE_NAMES[d.m]) { net.lobbyMode = d.m; renderLobby(); } });
   room.onPeerJoin(({ peerId }) => net.A.hi && net.A.hi.send({ name: net.name, host: net.isHost, spec: !!net.spec, c: myColor }, { target: peerId }).catch(() => {}));
   room.onPeerLeave(({ peerId }) => onLeave(peerId));
   room.onError(e => { if (e.code === 'room-full' && state === 'lobby' && !net.isHost && !net.spec) kicked(code, 'That game is full — still looking…'); });
@@ -2254,7 +2309,7 @@ function onHi(d, peerId) {
   if (net.roster.some(p => p.id === peerId)) return;
   if (net.roster.length >= MAXP) { netSend('full', {}, peerId); return; }
   net.roster.push({ id: peerId, name: d.name.slice(0, 14) || 'Player', c: freeColor(d.c | 0, peerId) });
-  netSend('roster', net.roster);
+  sendRoster();
   renderLobby(); sendAd(); sfx.pop(.5);
 }
 function onLeave(peerId) {
@@ -2270,11 +2325,12 @@ function onLeave(peerId) {
   if (net.isHost) {
     const n = net.roster.length;
     net.roster = net.roster.filter(p => p.id !== peerId);
-    if (net.roster.length !== n) { netSend('roster', net.roster); renderLobby(); sendAd(); }
+    if (net.roster.length !== n) { sendRoster(); renderLobby(); sendAd(); }
   } else if (peerId === net.hostPeer) {
     kicked(net.gameCode, 'The host left — looking for another game…');
   }
 }
+function sendRoster() { netSend('roster', net.roster); netSend('mode', { m: net.lobbyMode }); }
 function freeColor(pref, id) {
   const taken = new Set(net.roster.filter(p => p.id !== id).map(p => p.c));
   if (pref >= 0 && pref < MP_COLORS.length && !taken.has(pref)) return pref;
@@ -2285,7 +2341,7 @@ function pickLobbyColor(i) {
   setMyColor(i);
   if (net.isHost) {
     const me = net.roster.find(p => p.id === net.myId);
-    if (me) { me.c = freeColor(i, net.myId); setMyColor(me.c); netSend('roster', net.roster); }
+    if (me) { me.c = freeColor(i, net.myId); setMyColor(me.c); sendRoster(); }
   } else if (net.hostPeer) netSend('col', { c: i }, net.hostPeer);
   renderLobby();
 }
@@ -2299,13 +2355,14 @@ function renderLobby() {
     `<div><span class="dot" style="background:${colorCss(clamp(p.c | 0, 0, MP_COLORS.length - 1))}"></span>` +
     `${i === 0 ? '👑 ' : ''}${p.name.replace(/[<>&]/g, '')}${p.id === net.myId ? ' (you)' : ''}</div>`).join('');
   const inRoster = net.roster.some(p => p.id === net.myId);
+  renderModes($('mpModes'), net.lobbyMode, net.isHost ? m => { net.lobbyMode = m; modePref = m; localStorage.setItem('gulpcity_mode', m); sendRoster(); renderLobby(); } : null);
   setStatus(net.isHost
     ? (net.roster.length > 1 ? 'Press START when everyone is in!' : '<span class="spin">🌀</span> Waiting for players to join… (you can start alone too)')
     : inRoster ? `Waiting for ${net.hostName} to press START…` : '<span class="spin">🌀</span> Joining…');
 }
 $('mpStart').addEventListener('click', () => {
   if (!net.isHost || state !== 'lobby' || !net.room) return;
-  const d = { seed: Math.floor(Math.random() * 2 ** 31), roster: net.roster };
+  const d = { seed: Math.floor(Math.random() * 2 ** 31), roster: net.roster, mode: net.lobbyMode };
   net.started = true; sendAd();
   netSend('start', d);
   beginMP(d);
@@ -2315,7 +2372,7 @@ function beginMP(d) {
   closeAsk(); clearTimeout(net.seekTimer); leaveLobby();
   net.inGame = true; net.eaten = []; net.stT = 0;
   lastGame = { code: net.gameCode, hostName: net.hostName };
-  startGame({ mp: true, seed: d.seed >>> 0, roster: d.roster.slice(0, MAXP) });
+  startGame({ mp: true, seed: d.seed >>> 0, roster: d.roster.slice(0, MAXP), mode: d.mode === 'classic' ? 'classic' : 'towns' });
 }
 // ---- in-game messages ----
 function netTick(dt) {
@@ -2336,7 +2393,7 @@ function onState(d, { peerId }) {
   h.nx = x; h.nz = z; h.nvx = vx; h.nvz = vz; h.nR = R; h.growth = growth; h.level = level; h.score = score; h.lv = d.lv;
   h.netT = performance.now();
   h.frozenT = d.f & 1 ? .3 : 0; h.speedT = d.f & 2 ? .3 : 0; h.magnetT = d.f & 4 ? .3 : 0; h.shield = d.f & 8 ? .3 : 0;
-  const t = clamp(d.t | 0 || 1, 1, TOWNS), ep = d.ep | 0;
+  const t = clamp(d.t | 0, 0, TOWNS), ep = d.ep | 0;
   h.town = t; h.netAlive = !!d.a;
   if (ep > townEp[t]) refillTown(t, ep);                    // they saw a rebuild we missed
   if (net.spec && h === player && t !== town) loadTown(t);  // spectators follow their player between towns
@@ -2383,7 +2440,7 @@ function onPick(d, { peerId }) {
 function makeSnap() {
   const eaten = {};
   for (const [k, set] of eatenBy) eaten[k] = [...set];
-  return { seed: baseSeed, clk, gameT, townEp, eaten, refillT,
+  return { seed: baseSeed, clk, gameT, townEp, eaten, refillT, mode: gameMode, frenzy,
     holes: holes.map(h => ({ pid: h.isPlayer ? net.myId : h.pid, name: h.name, c: h.baseColor.getHex(), x: r2(h.isPlayer ? h.x : h.nx), z: r2(h.isPlayer ? h.z : h.nz),
       R: r2(h.R), level: h.level, score: h.score, growth: h.growth, alive: (h.isPlayer ? h.alive : h.netAlive) ? 1 : 0, lv: h.lv, t: townOf(h) })),
     pus: powerups.filter(p => !p.dead).map(p => ({ id: p.id, type: p.type, x: p.x, z: p.z })) };
@@ -2416,7 +2473,7 @@ function beginSpectate(d) {
   clearTimeout(net.seekTimer); leaveLobby();
   initAudio();
   net.spec = 'on'; net.inGame = true; mode = 'mp';
-  baseSeed = d.seed >>> 0;
+  baseSeed = d.seed >>> 0; gameMode = d.mode === 'classic' ? 'classic' : 'towns'; frenzy = !!d.frenzy;
   townEp = Array.isArray(d.townEp) ? d.townEp.slice(0, TOWNS + 1).map(v => v | 0) : new Array(TOWNS + 1).fill(0);
   while (townEp.length < TOWNS + 1) townEp.push(0);
   eatenBy = new Map(); for (const k in d.eaten || {}) eatenBy.set(k, new Set(d.eaten[k]));
@@ -2425,7 +2482,7 @@ function beginSpectate(d) {
   holes.forEach((h, i) => {
     const p = d.holes[i];
     h.x = h.nx = p.x; h.z = h.nz = p.z; h.R = h.nR = p.R; h.level = p.level; h.score = p.score; h.growth = p.growth; h.lv = p.lv;
-    h.town = clamp(p.t | 0 || 1, 1, TOWNS); h.netAlive = !!p.alive; h.netT = now;
+    h.town = clamp(p.t | 0, 0, TOWNS); h.netAlive = !!p.alive; h.netT = now;
   });
   clk = d.clk || 0; gameT = d.gameT || 0; refillT = d.refillT || REFILL_TIME;
   player = holes.find(h => h.netAlive) || holes[0];
@@ -2475,7 +2532,7 @@ addEventListener('resize', () => {
 pMat.uniforms.uScale.value = innerHeight / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) * .9;
 
 /* ---------------- main loop ---------------- */
-menuWorld(); showBest(); showSpColors();
+menuWorld(); showBest(); showSpColors(); showSpModes();
 const clock = new THREE.Clock();
 let sparkT = 0;
 function step(dt, time) {
