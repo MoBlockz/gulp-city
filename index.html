@@ -47,7 +47,7 @@ canvas{display:block;touch-action:none}
 .row .dot{width:13px;height:13px;border-radius:50%;border:2px solid #fff;flex:none}
 .row .sc{margin-left:auto;font-weight:900;padding-left:10px}
 .row.dead{opacity:.5}
-#chips{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);display:flex;gap:10px}
+#chips{position:absolute;bottom:calc(20px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);display:flex;gap:10px}
 .chip{padding:7px 14px;border-radius:999px;font-weight:900;font-size:17px;background:var(--c);color:#fff;
   box-shadow:0 4px 0 rgba(0,0,0,.3);text-shadow:0 1px 0 rgba(0,0,0,.4)}
 #banner{position:absolute;top:26%;left:0;right:0;text-align:center;font-size:clamp(28px,6vw,54px);font-weight:900;opacity:0;
@@ -56,6 +56,14 @@ canvas{display:block;touch-action:none}
 @keyframes ban{0%{opacity:0;transform:scale(.5)}12%{opacity:1;transform:scale(1.15)}22%{transform:scale(1)}80%{opacity:1}100%{opacity:0;transform:translateY(-20px)}}
 #mute{position:fixed;bottom:12px;left:12px;pointer-events:auto;font-size:22px;width:44px;height:44px;border-radius:50%;
   border:2px solid rgba(255,255,255,.4);background:rgba(24,16,52,.55);color:#fff;cursor:pointer;z-index:20}
+#dash{position:fixed;right:calc(18px + env(safe-area-inset-right));bottom:calc(18px + env(safe-area-inset-bottom));z-index:20;
+  width:92px;height:92px;border-radius:50%;border:4px solid #fff;font:inherit;font-weight:900;font-size:17px;color:#3a2500;cursor:pointer;
+  pointer-events:auto;background:conic-gradient(#ffd400 var(--p,100%),rgba(60,50,90,.85) 0);box-shadow:0 6px 0 #b57a00,0 10px 20px rgba(0,0,0,.4);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.05;touch-action:none}
+#dash span{font-size:30px}
+#dash.cool{color:#fff;box-shadow:0 6px 0 #3a3156}
+#dash.frozen{background:#6fe3ff;color:#06304a;animation:pulseD .4s infinite alternate}
+@keyframes pulseD{to{transform:scale(1.08)}}
 #quit{position:fixed;bottom:12px;left:64px;pointer-events:auto;font:inherit;font-size:14px;font-weight:900;height:44px;padding:0 14px;border-radius:22px;
   border:2px solid rgba(255,255,255,.4);background:rgba(24,16,52,.55);color:#fff;cursor:pointer;z-index:20}
 #joy{position:fixed;width:110px;height:110px;margin:-55px 0 0 -55px;border-radius:50%;border:3px solid rgba(255,255,255,.5);
@@ -161,6 +169,7 @@ canvas{display:block;touch-action:none}
 </div>
 <button id="mute" title="Mute (M)">🔊</button>
 <button id="quit" class="hidden">🏁 END</button>
+<button id="dash" class="hidden"><span>⚡</span>DASH</button>
 <div id="joy" class="hidden"><div id="knob"></div></div>
 
 <div id="menu" class="screen">
@@ -295,8 +304,21 @@ const canvas = renderer.domElement;
 const scene = new THREE.Scene();
 const skyCol = new THREE.Color(0x8fd8ff);
 scene.background = skyCol;
+const horizonCol = new THREE.Color(0xc9ecff);
 scene.fog = new THREE.Fog(0x8fd8ff, 80, 260);
-scene.fog.color = skyCol;
+scene.fog.color = horizonCol;   // fog melts into the horizon of the sky dome
+// gradient sky dome that follows the camera
+const skyDome = new THREE.Mesh(new THREE.SphereGeometry(1500, 32, 16), new THREE.ShaderMaterial({
+  side: THREE.BackSide, depthWrite: false, fog: false,
+  uniforms: { uTop: { value: skyCol }, uHor: { value: horizonCol } },
+  vertexShader: `varying vec3 vD; void main(){ vD = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: `uniform vec3 uTop; uniform vec3 uHor; varying vec3 vD;
+    void main(){ float t = smoothstep(-0.02, 0.45, vD.y); gl_FragColor = vec4(mix(uHor, uTop, t), 1.0);
+      #include <colorspace_fragment>
+    }`,
+}));
+skyDome.renderOrder = -10; skyDome.frustumCulled = false;
+scene.add(skyDome);
 
 const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.5, 1800);
 camera.position.set(0, 60, 60);
@@ -1026,6 +1048,15 @@ const lipGeo = new THREE.RingGeometry(1.09, 1.32, 64); lipGeo.rotateX(-Math.PI /
 const lipMat = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: .16, depthWrite: false }); patchGround(lipMat);
 const magGeo = (() => { const L = []; for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; L.push(part(new THREE.RingGeometry(1, 1.05, 8, 1, a, .45), 0xffffff)); } const g = merge(L); g.rotateX(-Math.PI / 2); return g; })();
 const ICE = new THREE.Color(0x9feaff);
+const glowGeo = new THREE.PlaneGeometry(3.8, 3.8); glowGeo.rotateX(-Math.PI / 2);
+const glowTex = (() => {   // ring of light that starts at the rim and fades outward
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d'), gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(.5, 'rgba(255,255,255,0)'); gr.addColorStop(.53, 'rgba(255,255,255,.9)');
+  gr.addColorStop(.62, 'rgba(255,255,255,.35)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+})();
 
 function makeTubeMat(color) {
   return new THREE.ShaderMaterial({
@@ -1062,20 +1093,23 @@ function makeHole(def) {
   const rim = new THREE.Mesh(rimGeo, rimMat); rim.position.y = .045; grp.add(rim);
   const lip = new THREE.Mesh(lipGeo, lipMat); lip.position.y = .04; grp.add(lip);
   const magMat = new THREE.MeshBasicMaterial({ color: 0xff4d4d, transparent: true, opacity: .8, depthWrite: false });
+  const glowMat = new THREE.MeshBasicMaterial({ map: glowTex, color: def.color, transparent: true, opacity: .55,
+    blending: THREE.AdditiveBlending, depthWrite: false }); patchGround(glowMat);
+  const glow = new THREE.Mesh(glowGeo, glowMat); glow.position.y = .035; glow.renderOrder = 1; grp.add(glow);
   const mag = new THREE.Mesh(magGeo, magMat); mag.position.y = .09; mag.scale.setScalar(2.6); mag.visible = false; grp.add(mag);
   const tag = document.createElement('div'); tag.className = 'tag';
   const css = '#' + new THREE.Color(def.color).getHexString();
   tag.style.background = css; tag.textContent = def.name; $('tags').appendChild(tag);
   if (def.color === 0xffffff) { tag.style.color = '#2a1a5e'; tag.style.textShadow = 'none'; }
   return { name: def.name, baseColor: new THREE.Color(def.color), css, isPlayer: !!def.player, remote: !!def.remote, pid: def.pid || null,
-    grp, tm, rimMat, rim, mag, tag,
+    grp, tm, rimMat, rim, mag, tag, glow, glowMat,
     x: 0, z: 0, vx: 0, vz: 0, R: LEVELS[0].R, level: 0, growth: 0, score: 0, alive: true, dying: false, lv: 0,
     respawnT: 0, frozenT: 0, speedT: 0, magnetT: 0, shield: 0, spd: rand(.8, .88), caution: rand(.6, .95), lazy: rand(.15, .28),
     aiT: 0, mode: 'wander', target: null, tk: null, wx: 0, wz: 0, fx: 0, fz: 0, chkT: 0, cx: 0, cz: 0, stuckT: 0, sdx: 0, sdz: 0,
     nx: 0, nz: 0, nvx: 0, nvz: 0, nR: LEVELS[0].R, netT: 0 };
 }
 function destroyHole(h) {
-  scene.remove(h.grp); h.tm.dispose(); h.rimMat.dispose(); h.mag.material.dispose(); h.tag.remove();
+  scene.remove(h.grp); h.tm.dispose(); h.glowMat.dispose(); h.rimMat.dispose(); h.mag.material.dispose(); h.tag.remove();
 }
 function setHoles(defs) {
   holes.forEach(destroyHole);
@@ -1170,7 +1204,9 @@ const PU = {
   magnet: { color: 0xff3b3b, css: '#ff4d4d', icon: '🧲', label: 'MAGNET!' },
   speed:  { color: 0xffd400, css: '#f5b800', icon: '⚡', label: 'SPEED BOOST!' },
   freeze: { color: 0x6fe3ff, css: '#38bfe0', icon: '❄️', label: 'RIVALS FROZEN!' },
+  shield: { color: 0x3dff8c, css: '#1fbf63', icon: '🛡️', label: 'SHIELD! Nothing can hurt you' },
 };
+const SHIELD_TIME = 12;
 const puIconGeo = {
   magnet: merge([
     part(new THREE.TorusGeometry(.45, .16, 8, 16, Math.PI), 0xff3b3b, [0, 0, 0], [1, 1, 1], [0, 0, Math.PI]),
@@ -1185,6 +1221,12 @@ const puIconGeo = {
     part(G.box, 0x9feaff, [0, 0, 0], [1.3, .14, .14], [0, 0, Math.PI / 3]),
     part(G.box, 0x9feaff, [0, 0, 0], [1.3, .14, .14], [0, 0, -Math.PI / 3]),
     part(G.ico, 0xffffff, [0, 0, 0], [.25, .25, .25])]),
+  shield: (() => {
+    const sh = new THREE.Shape(); sh.moveTo(0, .72); sh.quadraticCurveTo(.4, .62, .58, .62); sh.quadraticCurveTo(.6, -.2, 0, -.75);
+    sh.quadraticCurveTo(-.6, -.2, -.58, .62); sh.quadraticCurveTo(-.4, .62, 0, .72);
+    const g = new THREE.ExtrudeGeometry(sh, { depth: .2, bevelEnabled: false }); g.translate(0, 0, -.1);
+    return merge([part(g, 0x3dff8c), part(G.box, 0xffffff, [0, .05, .12], [.14, .8, .04]), part(G.box, 0xffffff, [0, .2, .12], [.6, .14, .04])]);
+  })(),
 };
 const puIconMat = new THREE.MeshBasicMaterial({ vertexColors: true });
 let powerups = [], puTimer = 4, puSeq = 0;
@@ -1207,7 +1249,8 @@ function applyPU(h, p) {
   const T = PU[p.type];
   if (p.type === 'magnet') h.magnetT = 7;
   else if (p.type === 'speed') h.speedT = 6;
-  else for (const o of holes) if (o !== h && o.alive) o.frozenT = 3;
+  else if (p.type === 'shield') h.shield = Math.max(h.shield, SHIELD_TIME);
+  else for (const o of holes) if (o !== h && o.alive && !(o.shield > 0)) o.frozenT = 3;   // shields block freezes
   burst(p.x, 1.2, p.z, T.color, 30, 6, .45);
   if (state !== 'play') return;
   if (h.isPlayer) { banner(`${T.icon} ${T.label}`, T.css, 1.5); p.type === 'freeze' ? sfx.freeze() : sfx.power(); }
@@ -1312,6 +1355,7 @@ function updateRings(dt) {
 /* ---------------- popups / tags / banner ---------------- */
 let pops = [];
 function popup(x, y, z, text, cls = '') {
+  while (pops.length >= 14) pops.shift().el.remove();
   const el = document.createElement('div'); el.className = 'pop ' + cls; el.textContent = text;
   $('pops').appendChild(el);
   pops.push({ el, x, y, z, t: 0 });
@@ -1409,6 +1453,7 @@ addEventListener('keydown', e => {
   if (e.target && e.target.tagName === 'INPUT') { if (e.code === 'Enter') $('mpGo').click(); return; }
   keys[e.code] = true;
   if (e.code === 'KeyM') toggleMute();
+  if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyE') && !e.repeat) doDash();
   if (net.spec && state === 'play' && ['ArrowRight', 'ArrowLeft', 'KeyD', 'KeyA', 'Space'].includes(e.code)) followNext(e.code === 'ArrowLeft' || e.code === 'KeyA' ? -1 : 1);
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
   if ((e.code === 'Enter' || e.code === 'Space') && !overLock && (state === 'menu' || (state === 'over' && mode === 'sp'))) startGame();
@@ -1653,12 +1698,18 @@ function updateHoles(dt, time) {
     if (h.frozenT > 0) { h.frozenT -= dt; mx = mz = 0; if (Math.random() < .3) emit(h.x + rand(-h.R, h.R), 1.5, h.z + rand(-h.R, h.R), 0, -1, 0, 0xffffff, .25, 1, 1); }
     h.speedT = Math.max(0, h.speedT - dt); h.magnetT = Math.max(0, h.magnetT - dt); h.shield = Math.max(0, h.shield - dt);
     h.boostT = Math.max(0, (h.boostT || 0) - dt);
-    const sp = holeSpeed(h.R) * (frenzy ? 1.5 : 1) * (h.speedT > 0 ? 1.6 : 1) * (h.boostT > 0 ? 2 : 1) * (h.isPlayer && state === 'play' ? 1 : h.spd);
+    const sp = holeSpeed(h.R) * (frenzy ? 1.5 : 1) * (h.speedT > 0 ? 1.6 : 1) * (h.boostT > 0 ? 2 : 1) * (h.isPlayer && dashT > 0 ? 2.2 : 1) * (h.isPlayer && state === 'play' ? 1 : h.spd);
     const k2 = 1 - Math.exp(-dt * 16);   // snappy steering
     h.vx += (mx * sp - h.vx) * k2; h.vz += (mz * sp - h.vz) * k2;
     h.x = clamp(h.x + h.vx * dt, -HALF, HALF); h.z = clamp(h.z + h.vz * dt, -HALF, HALF);
     h.R += (targetRadius(h) - h.R) * (1 - Math.exp(-dt * 3));
-    if ((h.speedT > 0 || h.boostT > 0) && Math.hypot(h.vx, h.vz) > 1) {
+    const spd = Math.hypot(h.vx, h.vz);
+    if (spd > 2 && Math.random() < dt * (6 + h.R * 2)) {
+      const a = Math.atan2(h.vz, h.vx) + rand(-1.1, 1.1);
+      emit(h.x + Math.cos(a) * h.R, .05, h.z + Math.sin(a) * h.R, -Math.cos(a) * 1.5, rand(.8, 2), -Math.sin(a) * 1.5,
+        pick([0x9aa0a8, 0xc9ced6, 0x7c8590, 0x8a6a4a]), .12 + h.R * .03, .5, 9);
+    }
+    if ((h.speedT > 0 || h.boostT > 0 || (h.isPlayer && dashT > 0)) && spd > 1) {
       const a = Math.random() * Math.PI * 2;
       emit(h.x + Math.cos(a) * h.R, .2, h.z + Math.sin(a) * h.R, -h.vx * .2, 1.5, -h.vz * .2, 0xffd400, .35 + h.R * .05, .4, 2);
     }
@@ -1692,6 +1743,8 @@ function syncHoles(time) {
     h.tm.uniforms.uR.value = h.R;
     const col = h.frozenT > 0 ? ICE : h.baseColor;
     h.rimMat.color.copy(col); h.tm.uniforms.uColor.value.copy(col);
+    h.glowMat.color.copy(h.shield > 0 ? _hz.set(0x3dff8c) : col);
+    h.glowMat.opacity = (h.shield > 0 ? .8 : .42) + Math.sin(time * 3 + h.R) * .1 + night * .25;
     h.rim.visible = h.shield > 0 ? Math.sin(time * 30) > 0 : true;
     h.mag.visible = h.magnetT > 0;
     if (h.mag.visible) { h.mag.rotation.y = -time * 2; const s = 2.6 + Math.sin(time * 8) * .15; h.mag.scale.set(s, 1, s); }
@@ -1702,6 +1755,7 @@ function syncHoles(time) {
 const SKY_DAY = new THREE.Color(0x8fd8ff), SKY_SET = new THREE.Color(0xff9f78), SKY_NIGHT = new THREE.Color(0x151b40);
 const SUN_DAY = new THREE.Color(0xfff6e5), SUN_SET = new THREE.Color(0xff9a55), MOON = new THREE.Color(0x8fa8ff);
 const HEMI_DAY = new THREE.Color(0xe8f6ff), HEMI_NIGHT = new THREE.Color(0x5464a8);
+const _hz = new THREE.Color();
 let night = 0, lampLevel = 0, lampOn = false, flickerT = 0, dayIcon = '☀️';
 // p = position in one day (0 morning … .6 sunset … .75–.88 night … 1 dawn → loops back to morning)
 function setDay(p, dt) {
@@ -1709,6 +1763,7 @@ function setDay(p, dt) {
   const set = smooth(.4, .6, p) * (1 - smooth(.68, .85, p)) + smooth(.88, .94, p) * (1 - dawn) * .7;
   night = smooth(.6, .85, p) * (1 - dawn);
   skyCol.copy(SKY_DAY).lerp(SKY_SET, set).lerp(SKY_NIGHT, night);
+  horizonCol.copy(skyCol).lerp(_hz.setRGB(1, 1, 1), lerp(.42, .12, night)).lerp(_hz.set(0xffc49a), set * .35);
   sun.color.copy(SUN_DAY).lerp(SUN_SET, set).lerp(MOON, night);
   sun.intensity = lerp(1.9, .55, night) * (1 - set * .2);
   hemi.color.copy(HEMI_DAY).lerp(SKY_SET, set * .4).lerp(HEMI_NIGHT, night);
@@ -1748,6 +1803,7 @@ function updateCamera(dt) {
   camera.position.set(camBase.x + sx, camBase.y + sy, camBase.z + sz);
   camera.lookAt(camLook.x + sx * .5, camLook.y, camLook.z + sz * .5);
   shake *= Math.exp(-dt * 5); if (shake < .01) shake = 0;
+  skyDome.position.copy(camera.position);
   scene.fog.near = H * 1.6; scene.fog.far = Math.max(H * 4 + 90, 320);
   // shadows follow the view
   const S = clamp(H * 1.3, 25, 130), sc = sun.shadow.camera;
@@ -1792,6 +1848,7 @@ function updHUD() {
   let chips = '';
   if (P.magnetT > 0) chips += `<div class="chip" style="--c:#ff4d4d">🧲 ${P.magnetT.toFixed(1)}</div>`;
   if (P.speedT > 0) chips += `<div class="chip" style="--c:#f5b800">⚡ ${P.speedT.toFixed(1)}</div>`;
+  if (P.shield > 0 && !(P.boostT > 0) && !net.spec) chips += `<div class="chip" style="--c:#1fbf63">🛡️ SHIELD ${P.shield.toFixed(1)}</div>`;
   if (P.boostT > 0) chips += `<div class="chip" style="--c:#8a5cff">🛡️ SAFE + 2× SPEED ${P.boostT.toFixed(1)}</div>`;
   if (P.frozenT > 0) chips += `<div class="chip" style="--c:#38bfe0">❄️ FROZEN ${P.frozenT.toFixed(1)}</div>`;
   $('chips').innerHTML = chips;
@@ -1832,7 +1889,7 @@ let state = 'menu', mode = 'sp', hudT = 0, miniT = 0, lodT = 0, overLock = false
 const bestKey = 'gulpcity_best';
 const getBest = () => +(localStorage.getItem(bestKey) || 0);
 function showBest() { const b = getBest(); $('best').textContent = b ? `🏆 Best score: ${b.toLocaleString()}` : ''; }
-const screens = ['menu', 'mp', 'over', 'hud', 'quit', 'ask'];
+const screens = ['menu', 'mp', 'over', 'hud', 'quit', 'ask', 'dash'];
 function only(...ids) { for (const s of screens) $(s).classList.toggle('hidden', !ids.includes(s)); }
 
 let clearing = false;
@@ -1898,7 +1955,7 @@ function goToTown(t) {
   }
   loadTown(t);
   const [x, z] = roadPoint();
-  player.x = x; player.z = z; player.vx = player.vz = 0; player.shield = Math.max(player.shield, 3);
+  player.x = x; player.z = z; player.vx = player.vz = 0; player.shield = Math.max(player.shield, 5);
   if (mode === 'sp') rerollRivals();
   camBase.set(player.x, camBase.y, player.z + camBase.y * .72); camLook.set(player.x, 0, player.z);
   ringFX(player.x, player.z, player.R, player.baseColor);
@@ -2014,7 +2071,7 @@ function startGame(opts = {}) {
   killsLeft = KILLS; killsBy = new Map(); toggleKillPanel(false);
   camBase.set(player.x, 30, player.z + 30); camLook.set(player.x, 0, player.z);
   state = 'play';
-  only('hud', 'quit'); $('quit').textContent = '🏁 END'; updKillBtn();
+  only('hud', 'quit', 'dash'); $('quit').textContent = '🏁 END'; updKillBtn(); dashT = 0; dashCd = 0;
   updHUD(); drawMini(0);
   banner(gameMode === 'classic' ? 'GULP THE WHOLE CITY!' : `🏙️ TOWN 1 of ${TOWNS} — GULP!`, '#ffe66d', 1.6); sfx.start();
 }
@@ -2068,6 +2125,32 @@ $('quit').addEventListener('click', e => {
   if (net.spec) toMenu(); else if (state === 'play') endGame('quit');
 });
 
+/* ---------------- dash ----------------
+   Tap DASH (or Shift / E) for a burst of speed. While frozen it breaks you free instead. */
+const DASH_TIME = 1.2, DASH_CD = 8;
+let dashT = 0, dashCd = 0;
+function doDash() {
+  if (state !== 'play' || net.spec || !player.alive || dashCd > 0) return;
+  dashCd = DASH_CD;
+  if (player.frozenT > 0) {
+    player.frozenT = 0; banner('💥 BROKE FREE!', '#9feaff', 1.1); sfx.power();
+    burst(player.x, .5, player.z, 0x9feaff, 30, 7, .4);
+    return;
+  }
+  dashT = DASH_TIME; sfx.power(); shake = Math.max(shake, .3);
+  ringFX(player.x, player.z, player.R, 0xffd400);
+}
+function updDash(dt) {
+  dashT = Math.max(0, dashT - dt); dashCd = Math.max(0, dashCd - dt);
+  const b = $('dash');
+  b.style.setProperty('--p', ((1 - dashCd / DASH_CD) * 100).toFixed(1) + '%');
+  b.classList.toggle('cool', dashCd > 0);
+  b.classList.toggle('frozen', dashCd <= 0 && player && player.frozenT > 0);
+  const label = dashCd > 0 ? `<span>⏳</span>${Math.ceil(dashCd)}` : player && player.frozenT > 0 ? '<span>💥</span>BREAK FREE' : '<span>⚡</span>DASH';
+  if (b.innerHTML !== label) b.innerHTML = label;
+}
+$('dash').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); doDash(); });
+
 /* ---------------- kill button ----------------
    3 kills per game: tap 💀, tap a name, they're gone (they respawn shortly after, like being gulped). */
 const KILLS = 3;
@@ -2102,15 +2185,16 @@ function doKill(h) {
   killsLeft--;
   if (h.remote) {
     netSend('kill', { t: h.pid });
-    if (h.alive) killHole(h, 'YOU');
+    // they die on their own screen and tell everyone (or tell us it was blocked)
   } else killHole(h, 'YOU');
-  banner(`💀 You killed ${h.name}! (${killsLeft} left)`, '#ff6b6b', 1.8);
+  banner(h.remote ? `💀 Kill sent to ${h.name}! (${killsLeft} left)` : `💀 You killed ${h.name}! (${killsLeft} left)`, '#ff6b6b', 1.8);
   sfx.holeEat(); shake = Math.max(shake, .6);
   updKillBtn(); toggleKillPanel(false);
 }
 // multiplayer: the target hears about it and kills itself (only 3 per attacker are accepted)
 function onKill(d, { peerId }) {
-  if (!d || d.t !== net.myId || net.spec || state !== 'play' || !player.alive || player.shield > 0) return;
+  if (!d || d.t !== net.myId || net.spec || state !== 'play' || !player.alive) return;
+  if (player.shield > 0) { netSend('kblock', {}, peerId); banner('🛡️ YOUR SHIELD BLOCKED A KILL!', '#3dff8c', 1.6); return; }
   const n = killsBy.get(peerId) || 0; if (n >= KILLS) return;
   killsBy.set(peerId, n + 1);
   const k = holeByPid(peerId);
@@ -2269,9 +2353,14 @@ async function joinGameRoom(code, host, hostName) {
   renderLobby();
 }
 function wireRoom(room, code) {
-  for (const n of ['hi', 'roster', 'full', 'start', 'st', 'gulp', 'pu', 'pick', 'end', 'snap', 'refill', 'col', 'kill', 'died', 'mode']) net.A[n] = room.makeAction(n);
+  for (const n of ['hi', 'roster', 'full', 'start', 'st', 'gulp', 'pu', 'pick', 'end', 'snap', 'refill', 'col', 'kill', 'died', 'mode', 'kblock']) net.A[n] = room.makeAction(n);
   net.A.kill.onMessage(onKill);
   net.A.died.onMessage(onDied);
+  net.A.kblock.onMessage((d, { peerId }) => {
+    const h = holeByPid(peerId);
+    if (state === 'play' && killsLeft < KILLS) { killsLeft++; updKillBtn(); }
+    banner(`🛡️ ${h ? h.name : 'They'} blocked your kill! (refunded)`, '#3dff8c', 1.8);
+  });
   net.A.hi.onMessage((d, { peerId }) => onHi(d, peerId));
   net.A.snap.onMessage(d => onSnap(d));
   net.A.roster.onMessage((d, { peerId }) => { if (peerId === net.hostPeer && Array.isArray(d)) { net.roster = d; renderLobby(); } });
@@ -2387,7 +2476,7 @@ function netTick(dt) {
 const r2 = v => Math.round(v * 100) / 100;
 function netState() {
   const p = player;
-  const f = (p.frozenT > 0 ? 1 : 0) | (p.speedT > 0 || p.boostT > 0 ? 2 : 0) | (p.magnetT > 0 ? 4 : 0) | (p.shield > 0 ? 8 : 0);
+  const f = (p.frozenT > 0 ? 1 : 0) | (p.speedT > 0 || p.boostT > 0 || dashT > 0 ? 2 : 0) | (p.magnetT > 0 ? 4 : 0) | (p.shield > 0 ? 8 : 0);
   netSend('st', { p: [r2(p.x), r2(p.z), r2(p.vx), r2(p.vz), r2(p.R), p.growth, p.level, p.score], f, lv: p.lv, a: p.alive ? 1 : 0,
     t: town, ep: townEp[town], e: net.eaten.splice(0) });
 }
@@ -2437,6 +2526,9 @@ function onPick(d, { peerId }) {
   const p = powerups.find(q => q.id === d.id);
   if (p && !p.dead) { p.dead = true; burst(p.x, 1.2, p.z, PU[p.type].color, 30, 6, .45); }
   const h = holeByPid(peerId);
+  if (d.type === 'freeze' && d.t === town && !net.spec && player.alive && state === 'play' && player.shield > 0) {
+    banner('🛡️ FREEZE BLOCKED!', '#3dff8c', 1.3); return;
+  }
   if (d.type === 'freeze' && d.t === town && !net.spec && player.alive && state === 'play') {
     player.frozenT = 3; banner(`❄️ FROZEN by ${h ? h.name : 'someone'}!`, '#9feaff', 1.5); sfx.freeze();
   }
@@ -2574,9 +2666,33 @@ function step(dt, time) {
     }
   }
 }
+// If frames get slow, drop resolution and then shadows; raise them again when there's headroom.
+const QUALITY = [
+  { pr: Math.min(devicePixelRatio, isTouch ? 1.5 : 2), shadows: true },
+  { pr: Math.min(devicePixelRatio, 1.2), shadows: true },
+  { pr: 1, shadows: false },
+  { pr: .75, shadows: false },
+];
+let qLevel = 0, qT = 0, qFrames = 0, qGood = 0;
+function setQuality(l) {
+  qLevel = l; const q = QUALITY[l];
+  renderer.setPixelRatio(q.pr); renderer.setSize(innerWidth, innerHeight);
+  sun.castShadow = q.shadows;
+}
+function adaptQuality(raw) {
+  if (document.hidden || state === 'menu') { qT = 0; qFrames = 0; return; }
+  qT += raw; qFrames++;
+  if (qT < 2) return;
+  const fps = qFrames / qT; qT = 0; qFrames = 0;
+  if (fps < 38 && qLevel < QUALITY.length - 1) { setQuality(qLevel + 1); qGood = 0; }
+  else if (fps > 57) { if (++qGood >= 5 && qLevel > 0) { setQuality(qLevel - 1); qGood = 0; } }
+  else qGood = 0;
+}
 function frame() {
   requestAnimationFrame(frame);
-  const dt = Math.min(clock.getDelta(), .05), time = clock.elapsedTime;
+  const raw = clock.getDelta(), dt = Math.min(raw, .05), time = clock.elapsedTime;
+  adaptQuality(Math.min(raw, .5));
+  if (state === 'play') updDash(dt);
   step(dt, time);
   syncHoles(time);
   updateParticles(dt);
