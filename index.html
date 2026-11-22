@@ -93,7 +93,9 @@ canvas{display:block;touch-action:none}
   -webkit-text-stroke:2px rgba(30,10,60,.6);text-shadow:0 5px 0 rgba(30,10,60,.6)}
 #banner.show{animation:ban 1.6s ease-out forwards}
 @keyframes ban{0%{opacity:0;transform:scale(.5)}12%{opacity:1;transform:scale(1.15)}22%{transform:scale(1)}80%{opacity:1}100%{opacity:0;transform:translateY(-20px)}}
-#mute{position:fixed;bottom:12px;left:12px;pointer-events:auto;font-size:22px;width:44px;height:44px;border-radius:50%;
+#music{left:64px!important}
+#music.off{opacity:.45;text-decoration:line-through}
+#mute,#music{position:fixed;bottom:12px;left:12px;pointer-events:auto;font-size:22px;width:44px;height:44px;border-radius:50%;
   border:2px solid rgba(255,255,255,.4);background:rgba(24,16,52,.55);color:#fff;cursor:pointer;z-index:20}
 #dash{position:fixed;right:calc(18px + env(safe-area-inset-right));bottom:calc(18px + env(safe-area-inset-bottom));z-index:20;
   width:92px;height:92px;border-radius:50%;border:4px solid #fff;font:inherit;font-weight:900;font-size:17px;color:#3a2500;cursor:pointer;
@@ -212,7 +214,8 @@ canvas{display:block;touch-action:none}
   <div id="chips"></div>
   <div id="banner"></div>
 </div>
-<button id="mute" title="Mute (M)">🔊</button>
+<button id="mute" title="Sound on/off (M)">🔊</button>
+<button id="music" title="Music on/off (N)">🎵</button>
 <button id="quit" class="hidden">🏁 END</button>
 <button id="dash" class="hidden"><span>⚡</span>DASH</button>
 <div id="joy" class="hidden"><div id="knob"></div></div>
@@ -1473,6 +1476,7 @@ function initAudio() {
       const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
     }
     if (actx.state === 'suspended') actx.resume();
+    startMusic();
   } catch (e) { actx = null; }
 }
 function tone(type, f0, f1, dur, vol, delay = 0) {
@@ -1489,13 +1493,18 @@ function noise(dur, vol, freq, type = 'lowpass', delay = 0) {
   g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
   s.connect(f); f.connect(g); g.connect(master); s.start(t); s.stop(t + dur + .05);
 }
-let lastPop = 0;
+let lastPop = 0, popN = 0, popLast = 0;
+const PENTA = [0, 2, 4, 7, 9];
+const mtof = n => 440 * 2 ** ((n - 69) / 12);
 const sfx = {
   pop(r, gold) {
     if (!actx) return;
     const now = actx.currentTime; if (now - lastPop < .03) return; lastPop = now;
-    const f = clamp(950 / (.5 + r), 110, 1400) * rand(.9, 1.1);
-    tone('sine', f * .7, f * 1.8, .11, .28); tone('triangle', f * 1.4, f * 2.4, .06, .08);
+    if (now - popLast > .8) popN = 0;
+    popLast = now; popN = Math.min(popN + 1, 11);
+    const deg = popN - 1 + (r < .6 ? 5 : r < 1.2 ? 2 : 0);   // small things sing higher
+    const f = mtof(65 + 12 * Math.floor(deg / 5) + PENTA[deg % 5]);
+    tone('sine', f, f * 1.005, .16, .17); tone('triangle', f * 2, f * 2.01, .06, .035);
     if (gold) { tone('sine', 1568, 1570, .15, .12, .04); tone('sine', 2093, 2095, .25, .1, .1); }
   },
   gulp(r) { tone('sine', 220 / (.6 + r * .2), 35, .45, .45); noise(.35, .22, 500); },
@@ -1515,12 +1524,98 @@ function toggleMute() {
 }
 $('mute').addEventListener('click', e => { e.stopPropagation(); initAudio(); toggleMute(); });
 
+/* ---------------- music: an original chill-pop loop played live with Web Audio ----------------
+   F major, I-vi-IV-V, 104 bpm. Soft and filtered on the menu, full band in game, brighter in FINAL FRENZY. */
+let musicOn = localStorage.getItem('gulpcity_music') !== 'off', musicBus = null, musicLP = null, musicTimer = 0, mStep = 0, mNext = 0, SONG = null;
+const M_STEP = 60 / 104 / 4;   // one 16th note
+const CHORDS = [[53, 57, 60, 64], [50, 53, 57, 60], [46, 50, 53, 57], [48, 52, 55, 58]];   // Fmaj7 Dm7 Bbmaj7 C7
+function makeSong() {
+  const r = mulberry32(20261122);
+  const motif = () => {   // 2 bars of melody on the F pentatonic scale
+    const out = []; let deg = 7;
+    for (let s = 0; s < 32; s++) {
+      const hit = s % 4 === 0 ? r() < .75 : s % 2 === 0 ? r() < .4 : r() < .1;
+      if (!hit || s === 30 || s === 31) { out.push(null); continue; }
+      deg = clamp(deg + Math.round((r() - .5) * 4.5), 4, 13);
+      let len = 1; while (len < 4 && s + len < 32 && r() < .55) len++;
+      out.push({ n: 65 + 12 * Math.floor(deg / 5) + PENTA[deg % 5], len });
+    }
+    return out;
+  };
+  const m = Array.from({ length: 6 }, motif);
+  const A = [m[0], m[1], m[0], m[2]], B = [m[3], m[4], m[3], m[5]];
+  return [A, A, B, A];   // 32 bars, then it loops
+}
+function mNote(type, freq, t, dur, vol, att = .008, cutoff = 0) {
+  const o = actx.createOscillator(), g = actx.createGain(); o.type = type; o.frequency.value = freq;
+  let out = o;
+  if (cutoff) { const f = actx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = cutoff; o.connect(f); out = f; }
+  g.gain.setValueAtTime(.0001, t); g.gain.linearRampToValueAtTime(vol, t + att); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+  out.connect(g); g.connect(musicBus); o.start(t); o.stop(t + dur + .05);
+}
+function mNoise(t, dur, vol, freq, type) {
+  const src = actx.createBufferSource(), f = actx.createBiquadFilter(), g = actx.createGain();
+  src.buffer = noiseBuf; f.type = type; f.frequency.value = freq;
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+  src.connect(f); f.connect(g); g.connect(musicBus); src.start(t, Math.random() * .5); src.stop(t + dur + .05);
+}
+function playStep(st, t) {
+  const inGame = state === 'play', hot = inGame && frenzy;
+  const bar = Math.floor(st / 16), s = st % 16, chord = CHORDS[Math.floor(bar / 2) % 4];
+  const sec = Math.floor(bar / 8) % 4, phrase = SONG[sec][Math.floor(bar / 2) % 4];
+  if (st % 32 === 0)   // warm pad on every chord change
+    chord.forEach((n, i) => { mNote('sine', mtof(n), t, 32 * M_STEP, .035, .5); mNote('triangle', mtof(n) * 1.003, t, 32 * M_STEP, .012, .6, 1200); });
+  if (s === 0 || s === 6 || s === 8 || s === 14)   // bass
+    mNote('triangle', mtof((s === 8 ? chord[2] : chord[0]) - 12), t, M_STEP * (s === 6 || s === 14 ? 1.6 : 3.2), .2, .01, 700);
+  const note = phrase[st % 32];   // lead melody
+  if (note) {
+    mNote('triangle', mtof(note.n), t, M_STEP * (note.len + .8), .07, .01);
+    mNote('sine', mtof(note.n + 12), t, M_STEP * note.len, .018, .01);
+  }
+  if (inGame && (sec === 2 || hot) && s % 2 === 0)   // sparkly arpeggio in the B part and in FINAL FRENZY
+    mNote('square', mtof(chord[(s / 2) % 4] + 24), t, M_STEP * 1.2, .012, .005, 2400);
+  if (!inGame) return;   // drums only while playing
+  if (s === 0 || s === 8 || (s === 10 && bar % 2)) { const o = actx.createOscillator(), g = actx.createGain();
+    o.frequency.setValueAtTime(130, t); o.frequency.exponentialRampToValueAtTime(42, t + .18);
+    g.gain.setValueAtTime(.32, t); g.gain.exponentialRampToValueAtTime(.0001, t + .28);
+    o.connect(g); g.connect(musicBus); o.start(t); o.stop(t + .3); }
+  if (s === 4 || s === 12) mNoise(t, .14, .12, 1800, 'bandpass');   // clap
+  if (s % 4 === 2 || (hot && s % 2 === 1)) mNoise(t, .04, .05, 7500, 'highpass');   // hi-hat
+}
+function schedMusic() {
+  if (!actx || actx.state !== 'running') return;
+  const now = actx.currentTime;
+  const want = !musicOn ? 0 : state === 'play' ? .34 : .7;
+  musicBus.gain.setTargetAtTime(want, now, .4);
+  musicLP.frequency.setTargetAtTime(state === 'play' ? (frenzy ? 9000 : 5500) : 2600, now, .6);
+  if (mNext < now - 1) mNext = now + .05;   // came back from the background: don't play catch-up
+  while (mNext < now + .3) { if (musicOn && mNext > now - .03) playStep(mStep, mNext); mStep++; mNext += M_STEP; }
+}
+function startMusic() {
+  if (!actx || musicTimer) return;
+  SONG = SONG || makeSong();
+  musicLP = actx.createBiquadFilter(); musicLP.type = 'lowpass'; musicLP.frequency.value = 1500; musicLP.connect(master);
+  musicBus = actx.createGain(); musicBus.gain.value = 0; musicBus.connect(musicLP);
+  mNext = actx.currentTime + .1; mStep = 0;
+  musicTimer = setInterval(schedMusic, 50);
+}
+function toggleMusic() {
+  musicOn = !musicOn; localStorage.setItem('gulpcity_music', musicOn ? 'on' : 'off');
+  $('music').classList.toggle('off', !musicOn);
+}
+$('music').classList.toggle('off', !musicOn);
+$('music').addEventListener('click', e => { e.stopPropagation(); initAudio(); toggleMusic(); });
+// iPad only allows sound after a tap: unlock it on the first touch anywhere
+for (const ev of ['pointerup', 'touchend', 'keydown']) addEventListener(ev, () => initAudio(), { once: true, passive: true });
+document.addEventListener('visibilitychange', () => { if (actx) document.hidden ? actx.suspend() : actx.resume(); });
+
 /* ---------------- input ---------------- */
 const keys = {};
 addEventListener('keydown', e => {
   if (e.target && e.target.tagName === 'INPUT') { if (e.code === 'Enter') $(e.target.id === 'mpCodeIn' ? 'mpCodeGo' : 'mpGo').click(); return; }
   keys[e.code] = true;
   if (e.code === 'KeyM') toggleMute();
+  if (e.code === 'KeyN') { initAudio(); toggleMusic(); }
   if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.code === 'KeyE') && !e.repeat) doDash();
   if (net.spec && state === 'play' && ['ArrowRight', 'ArrowLeft', 'KeyD', 'KeyA', 'Space'].includes(e.code)) followNext(e.code === 'ArrowLeft' || e.code === 'KeyA' ? -1 : 1);
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
@@ -2220,7 +2315,7 @@ function updDash(dt) {
 $('dash').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); doDash(); });
 
 /* ---------------- problem log (see the script in <head>) ---------------- */
-const VERSION = '2026-11-22e';
+const VERSION = '2026-11-22f';
 window.__gcStarted = true;
 window.__gcCtx = () => ({
   player: localStorage.getItem('gulpcity_name') || '(no name)',
@@ -2845,6 +2940,7 @@ function frame() {
   requestAnimationFrame(frame);
   const raw = clock.getDelta(), dt = Math.min(raw, .05), time = clock.elapsedTime;
   adaptQuality(Math.min(raw, .5));
+  if (musicTimer) schedMusic();   // the game loop keeps the beat steady even if timers run late
   if (state === 'play') updDash(dt);
   step(dt, time);
   syncHoles(time);
