@@ -29,7 +29,9 @@ canvas{display:block;touch-action:none}
 #hud{position:fixed;inset:0;pointer-events:none;color:#fff;text-shadow:0 2px 0 rgba(0,0,0,.35)}
 .panel{background:rgba(24,16,52,.55);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
   border-radius:16px;padding:10px 14px;border:2px solid rgba(255,255,255,.18)}
-#stats{position:absolute;top:calc(12px + env(safe-area-inset-top));left:calc(12px + env(safe-area-inset-left));min-width:210px}
+#mini{position:absolute;top:calc(12px + env(safe-area-inset-top));left:calc(12px + env(safe-area-inset-left));width:176px;height:176px;
+  border-radius:16px;border:3px solid rgba(255,255,255,.75);box-shadow:0 4px 14px rgba(0,0,0,.35);background:#2a1a5e}
+#stats{position:absolute;top:calc(200px + env(safe-area-inset-top));left:calc(12px + env(safe-area-inset-left));min-width:176px}
 #stats .lbl{font-size:12px;opacity:.75;letter-spacing:1px}
 #score{font-size:30px;font-weight:900;line-height:1.05}
 #sizeName{font-size:15px;font-weight:900;margin-top:6px;color:#d9c8ff}
@@ -37,8 +39,7 @@ canvas{display:block;touch-action:none}
 .bar>div{height:100%;width:0;background:linear-gradient(90deg,#c3a6ff,#8a5cff);border-radius:6px;transition:width .2s}
 #canEat{font-size:12px;margin-top:5px;opacity:.85}
 #timer{position:absolute;top:calc(12px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);font-size:34px;font-weight:900;padding:6px 20px;text-align:center}
-#timer.low{color:#ff6b6b;animation:pulse .5s infinite alternate}
-@keyframes pulse{to{transform:translateX(-50%) scale(1.12)}}
+#timer small{display:block;font-size:13px;opacity:.85;letter-spacing:1px}
 #board{position:absolute;top:calc(12px + env(safe-area-inset-top));right:calc(12px + env(safe-area-inset-right));min-width:215px}
 #board .ttl{font-size:12px;opacity:.75;letter-spacing:1px;margin-bottom:3px}
 .row{display:flex;align-items:center;gap:8px;font-size:15px;padding:3px 0;font-weight:700}
@@ -54,6 +55,8 @@ canvas{display:block;touch-action:none}
 #banner.show{animation:ban 1.6s ease-out forwards}
 @keyframes ban{0%{opacity:0;transform:scale(.5)}12%{opacity:1;transform:scale(1.15)}22%{transform:scale(1)}80%{opacity:1}100%{opacity:0;transform:translateY(-20px)}}
 #mute{position:fixed;bottom:12px;left:12px;pointer-events:auto;font-size:22px;width:44px;height:44px;border-radius:50%;
+  border:2px solid rgba(255,255,255,.4);background:rgba(24,16,52,.55);color:#fff;cursor:pointer;z-index:20}
+#quit{position:fixed;bottom:12px;left:64px;pointer-events:auto;font:inherit;font-size:14px;font-weight:900;height:44px;padding:0 14px;border-radius:22px;
   border:2px solid rgba(255,255,255,.4);background:rgba(24,16,52,.55);color:#fff;cursor:pointer;z-index:20}
 #joy{position:fixed;width:110px;height:110px;margin:-55px 0 0 -55px;border-radius:50%;border:3px solid rgba(255,255,255,.5);
   background:rgba(255,255,255,.08);pointer-events:none;z-index:5}
@@ -76,8 +79,30 @@ canvas{display:block;touch-action:none}
 .results div{display:flex;justify-content:space-between;gap:30px;font-size:19px;padding:5px 0}
 .results b{color:#ffe66d}
 #best{font-weight:900;color:#ffe66d}
+.btns{display:flex;gap:18px;flex-wrap:wrap;justify-content:center}
+.btn.alt{background:linear-gradient(#9be7ff,#38bfe0);color:#06304a;box-shadow:0 7px 0 #1f7fa0,0 12px 24px rgba(0,0,0,.4)}
+.btn.small{font-size:20px;padding:10px 28px}
+.btn.grey{background:linear-gradient(#e6e1f5,#b7aed6);color:#2a1a5e;box-shadow:0 6px 0 #7d74a3,0 10px 20px rgba(0,0,0,.35)}
+.btn:disabled{opacity:.5;pointer-events:none}
+#mp .box{background:rgba(24,16,52,.75);border-radius:20px;padding:18px 26px;min-width:300px;max-width:92vw;border:2px solid rgba(255,255,255,.2);
+  display:flex;flex-direction:column;gap:14px;align-items:center}
+#mp h2{font-size:28px;font-weight:900;color:#ffe66d;text-shadow:0 3px 0 #2a1a5e}
+#mp input{font:inherit;font-size:22px;font-weight:900;padding:10px 16px;border-radius:14px;border:3px solid #c3a6ff;width:260px;text-align:center;
+  background:#fff;color:#2a1a5e;user-select:text;-webkit-user-select:text;pointer-events:auto}
+#mpStatus{font-size:17px;font-weight:700;opacity:.95;min-height:22px}
+#mpPlayers{display:grid;grid-template-columns:repeat(2,minmax(130px,1fr));gap:4px 18px;max-height:42vh;overflow:auto;text-align:left}
+#mpPlayers div{font-size:16px;font-weight:700;display:flex;align-items:center;gap:8px}
+#mpPlayers .dot{width:13px;height:13px;border-radius:50%;border:2px solid #fff;flex:none}
+.spin{display:inline-block;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#ask{position:fixed;inset:0;z-index:30;display:flex;align-items:center;justify-content:center;background:rgba(10,5,30,.6)}
+#ask .box{background:#2a1a5e;border:3px solid #ffe66d;border-radius:22px;padding:22px 30px;text-align:center;color:#fff;display:flex;flex-direction:column;gap:16px;
+  box-shadow:0 14px 40px rgba(0,0,0,.5);max-width:92vw}
+#askText{font-size:26px;font-weight:900}
+#askSub{font-size:15px;opacity:.8}
 @media (max-width:700px){
-  #stats{min-width:150px;padding:7px 10px}#score{font-size:22px}#sizeName{font-size:12px}#canEat{display:none}
+  #mini{width:120px;height:120px}#stats{top:calc(142px + env(safe-area-inset-top))}
+  #stats{min-width:120px;padding:7px 10px}#score{font-size:22px}#sizeName{font-size:12px}#canEat{display:none}
   #board{min-width:150px;padding:7px 10px}.row{font-size:12px}#timer{font-size:24px;top:auto;bottom:70px}
 }
 </style>
@@ -87,6 +112,7 @@ canvas{display:block;touch-action:none}
 <div id="pops"></div>
 
 <div id="hud" class="hidden">
+  <canvas id="mini" width="176" height="176"></canvas>
   <div id="stats" class="panel">
     <div class="lbl">SCORE</div>
     <div id="score">0</div>
@@ -100,22 +126,53 @@ canvas{display:block;touch-action:none}
   <div id="banner"></div>
 </div>
 <button id="mute" title="Mute (M)">🔊</button>
+<button id="quit" class="hidden">🏁 END</button>
 <div id="joy" class="hidden"><div id="knob"></div></div>
 
 <div id="menu" class="screen">
   <div class="title">GULP<br><span>CITY</span></div>
-  <div class="sub">Swallow the city. Grow bigger. Gulp your rivals.</div>
-  <button id="playBtn" class="btn">▶ PLAY</button>
+  <div class="sub">Swallow the WHOLE city. Grow bigger. Gulp your rivals.</div>
+  <div class="btns">
+    <button id="playBtn" class="btn">👤 SINGLE PLAYER</button>
+    <button id="mpBtn" class="btn alt">👥 MULTIPLAYER</button>
+  </div>
   <div class="help">
     <b>WASD / Arrow keys</b> to move &nbsp;·&nbsp; <b>Drag</b> on touch screens<br>
-    Eat things smaller than you to grow: cones → people → cars → trees → houses → skyscrapers<br>
+    Eat things smaller than you: cones → people → cars → trees → houses → skyscrapers → the 2000 ft tower<br>
+    No timer: the game ends when the whole city has been gulped!<br>
     🧲 Magnet &nbsp; ⚡ Speed &nbsp; ❄️ Freeze rivals &nbsp; ✨ Golden things = 5× points
   </div>
   <div id="best"></div>
 </div>
 
+<div id="mp" class="screen hidden">
+  <div class="box">
+    <h2 id="mpTitle">MULTIPLAYER</h2>
+    <div id="mpNameRow" style="display:flex;flex-direction:column;gap:12px;align-items:center">
+      <div>Your name:</div>
+      <input id="mpName" maxlength="14" autocomplete="off" spellcheck="false">
+      <button id="mpGo" class="btn small">🔎 FIND A GAME</button>
+    </div>
+    <div id="mpStatus"></div>
+    <div id="mpPlayers"></div>
+    <button id="mpStart" class="btn small hidden">▶ START GAME</button>
+    <button id="mpBack" class="btn small grey">◀ BACK</button>
+  </div>
+</div>
+
+<div id="ask" class="hidden">
+  <div class="box">
+    <div id="askText"></div>
+    <div id="askSub"></div>
+    <div class="btns">
+      <button id="askYes" class="btn small">✔ YES</button>
+      <button id="askNo" class="btn small grey">✖ NO</button>
+    </div>
+  </div>
+</div>
+
 <div id="over" class="screen hidden">
-  <div class="title small">TIME'S UP!</div>
+  <div id="overTitle" class="title small">CITY GULPED!</div>
   <div id="rankText" class="rank"></div>
   <div class="results">
     <div><span>Score</span><b id="rScore"></b></div>
@@ -125,7 +182,10 @@ canvas{display:block;touch-action:none}
     <div><span>Biggest bite</span><b id="rBig"></b></div>
     <div><span>Best score</span><b id="rBest"></b></div>
   </div>
-  <button id="againBtn" class="btn">↻ PLAY AGAIN</button>
+  <div class="btns">
+    <button id="againBtn" class="btn">↻ PLAY AGAIN</button>
+    <button id="menuBtn" class="btn grey">🏠 MENU</button>
+  </div>
 </div>
 
 <script type="importmap">
@@ -139,6 +199,10 @@ import * as THREE from 'three';
    ================================================================ */
 
 const $ = id => document.getElementById(id);
+const realRandom = Math.random;
+// world generation runs on a seeded RNG so every multiplayer client builds the exact same city
+function mulberry32(a) { return () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function withRandom(fn, f) { const sv = Math.random; Math.random = fn; try { return f(); } finally { Math.random = sv; } }
 const rand = (a, b) => a + Math.random() * (b - a);
 const randi = (a, b) => Math.floor(a + Math.random() * (b - a + 1));
 const pick = a => a[Math.floor(Math.random() * a.length)];
@@ -146,13 +210,15 @@ const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const lerp = (a, b, t) => a + (b - a) * t;
 const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 
-const ROUND_TIME = 600;   // 10-minute rounds
 const EAT = 0.9;            // an object fits if its radius <= hole radius * EAT
-const HALF = 79;            // playable half-size
-const CITY = 80;            // textured ground half-size
+const NB = 11;              // city is NB x NB blocks
+const HALF = NB * 15 + 4;   // playable half-size (169)
+const CITY = NB * 15 + 5;   // textured ground half-size (170)
+const WRAP = CITY + 4;      // traffic wraps around at this distance
 const HOLE_DEPTH = 90;
-const BLOCKS = [-60, -30, 0, 30, 60];
-const ROADS = [-75, -45, -15, 15, 45, 75];
+const HMAX = 20;            // max holes (multiplayer cap)
+const BLOCKS = Array.from({ length: NB }, (_, i) => (i - (NB - 1) / 2) * 30);
+const ROADS = Array.from({ length: NB + 1 }, (_, i) => (i - NB / 2) * 30);
 const QUADS = [[-1, -1], [1, -1], [-1, 1], [1, 1]];
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -160,12 +226,13 @@ const LEVELS = [
   { R: 0.65, need: 0,    name: 'Pothole',    eats: 'cones, bins, bushes' },
   { R: 0.95, need: 40,    name: 'Manhole',    eats: 'people, benches, lamps' },
   { R: 1.45, need: 180,   name: 'Sinkhole',   eats: 'cars!' },
-  { R: 2.4,  need: 550,   name: 'Crater',     eats: 'trees, buses, fountains' },
-  { R: 3.2,  need: 1600,  name: 'Pit',        eats: 'houses' },
-  { R: 4.6,  need: 3200,  name: 'Chasm',      eats: 'shops & apartments' },
-  { R: 6.3,  need: 7500,  name: 'Abyss',      eats: 'SKYSCRAPERS' },
-  { R: 8.8,  need: 16000, name: 'Mega Void',  eats: 'THE GULP TOWER' },
-  { R: 12,   need: 30000, name: 'BLACK HOLE', eats: 'absolutely everything' },
+  { R: 2.4,  need: 500,   name: 'Crater',     eats: 'trees, buses, fountains' },
+  { R: 3.2,  need: 1300,  name: 'Pit',        eats: 'houses' },
+  { R: 4.6,  need: 2600,  name: 'Chasm',      eats: 'shops & apartments' },
+  { R: 6.3,  need: 5200,  name: 'Abyss',      eats: 'SKYSCRAPERS' },
+  { R: 8.8,  need: 9500,  name: 'Mega Void',  eats: 'GULP TOWERS' },
+  { R: 12,   need: 16000, name: 'BLACK HOLE', eats: 'everything but the 2000 ft tower' },
+  { R: 15.5, need: 26000, name: 'SUPERNOVA',  eats: 'THE 2000 FT TOWER!' },
 ];
 
 /* ---------------- renderer / scene ---------------- */
@@ -184,7 +251,7 @@ scene.background = skyCol;
 scene.fog = new THREE.Fog(0x8fd8ff, 80, 260);
 scene.fog.color = skyCol;
 
-const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.5, 900);
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.5, 1800);
 camera.position.set(0, 60, 60);
 const hemi = new THREE.HemisphereLight(0xf2f9ff, 0x9fb7a0, 1.9);
 const sun = new THREE.DirectionalLight(0xfff6e5, 1.9);
@@ -201,7 +268,7 @@ const sunDir = new THREE.Vector3(-0.4, 1, 0.3).normalize();
 /* ---------------- shader patches ----------------
    patchGround: discards fragments inside any hole -> real openings in the ground.
    patchDark:   darkens geometry below ground, so things fade as they fall into the dark. */
-const holeUniform = { value: [new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4(), new THREE.Vector4()] };
+const holeUniform = { value: Array.from({ length: HMAX }, () => new THREE.Vector4()) };
 function addWorldPos(sh) {
   sh.vertexShader = sh.vertexShader
     .replace('#include <common>', '#include <common>\nvarying vec3 vWP;')
@@ -213,9 +280,9 @@ function patchGround(mat) {
     addWorldPos(sh);
     sh.uniforms.uHoles = holeUniform;
     sh.fragmentShader = sh.fragmentShader
-      .replace('varying vec3 vWP;', 'varying vec3 vWP;\nuniform vec4 uHoles[4];')
+      .replace('varying vec3 vWP;', 'varying vec3 vWP;\nuniform vec4 uHoles[' + HMAX + '];')
       .replace('#include <clipping_planes_fragment>',
-        'for(int i=0;i<4;i++){ vec4 h=uHoles[i]; vec2 d=vWP.xz-h.xy; if(dot(d,d)<h.z*h.z) discard; }\n#include <clipping_planes_fragment>');
+        'for(int i=0;i<' + HMAX + ';i++){ vec4 h=uHoles[i]; vec2 d=vWP.xz-h.xy; if(dot(d,d)<h.z*h.z) discard; }\n#include <clipping_planes_fragment>');
   };
   mat.customProgramCacheKey = () => 'ground';
 }
@@ -287,7 +354,8 @@ function placed(geo, x, y, z, s = 1, ry = 0) {
   return g;
 }
 const geoCache = new Map();
-const cg = (k, f) => { let g = geoCache.get(k); if (!g) { g = f(); geoCache.set(k, g); } return g; };
+// cached builders use the real RNG so cache hits/misses never shift the seeded world-gen sequence
+const cg = (k, f) => { let g = geoCache.get(k); if (!g) { g = withRandom(realRandom, f); geoCache.set(k, g); } return g; };
 function vcMesh(geo, own = false) {
   const m = new THREE.Mesh(geo, vcMat);
   m.castShadow = true; m.receiveShadow = true; m.userData.vc = true; m.userData.own = own;
@@ -300,7 +368,7 @@ const lighten = (hex, a) => { const c = new THREE.Color(hex); c.offsetHSL(0, 0, 
 const texCache = new Map();
 function canvasTex(draw, size = 256) {
   const c = document.createElement('canvas'); c.width = c.height = size;
-  draw(c.getContext('2d'), size);
+  withRandom(realRandom, () => draw(c.getContext('2d'), size));
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace;
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
@@ -348,6 +416,12 @@ function wallMats(col, glass) {
   }
   return texCache.get(key);
 }
+const giantMats = (() => {
+  const body = new THREE.MeshLambertMaterial({ map: wallTex('#9fd8ff', true), emissiveMap: emTex(true), emissive: 0xffd27a, emissiveIntensity: 0, transparent: true });
+  patchDark(body); buildingMats.push(body);
+  const trim = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, transparent: true }); patchDark(trim);
+  return { body, trim };
+})();
 function bodyMesh(w, h, d, col, glass) {
   const geo = new THREE.BoxGeometry(w, h, d);
   const uv = geo.attributes.uv;
@@ -378,7 +452,8 @@ const DEF = {
   house:    { r: 2.7, h: 4.5, pts: 50,  label: 'a house',        color: 0xf6e3c4 },
   shop:     { r: 3.9, h: 10,  pts: 110, label: 'a building',     color: 0xcfe6f5 },
   tower:    { r: 5.2, h: 28,  pts: 260, label: 'a skyscraper',   color: 0x8fc3ea },
-  mega:     { r: 7.0, h: 54,  pts: 600, label: 'THE GULP TOWER', color: 0xffd54a },
+  mega:     { r: 7.0, h: 54,  pts: 600, label: 'a GULP TOWER',   color: 0xffd54a },
+  giant:    { r: 12,  h: 610, pts: 6000, label: 'THE 2000 FT TOWER', color: 0x9fd8ff },  // 610 m ≈ 2000 ft
 };
 const GOLDABLE = new Set(['cone', 'bin', 'hydrant', 'mailbox', 'bush', 'person', 'bench', 'lamp', 'car', 'tree', 'bus', 'fountain']);
 
@@ -550,14 +625,47 @@ const BUILD = {
       part(G.sph, 0xff3b3b, [0, 53.6, 0], [.3, .3, .3])]), true));
     return g;
   },
+  // THE 2000 FT TOWER: one per city, dead centre. Own materials so it can fade when it blocks your view.
+  giant: () => {
+    const g = new THREE.Group();
+    const tiers = [[15, 0, 130], [12.4, 130, 150], [9.6, 280, 140], [6.6, 420, 100], [3.8, 520, 40]];
+    for (const [w, y, h] of tiers) {
+      const m = bodyMesh(w, h, w, '#9fd8ff', true);
+      m.material = giantMats.body; m.position.y = y; g.add(m);
+    }
+    const L = [];
+    for (const [w, y, h] of tiers) {
+      L.push(part(G.box, 0xffc83d, [0, y + h - .3, 0], [w + .6, .9, w + .6]));
+      for (let k = y + 24; k < y + h - 6; k += 26) L.push(part(G.box, 0xffffff, [0, k, 0], [w + .2, .5, w + .2]));
+    }
+    L.push(part(G.cyl, 0xe8edf3, [0, 585, 0], [.9, 50, .9]));
+    L.push(part(G.cone, 0xffc83d, [0, 563, 0], [2.2, 6, 2.2]));
+    L.push(part(G.sph, 0xff3b3b, [0, 610, 0], [1.4, 1.4, 1.4]));
+    for (const [sx, sz] of QUADS) L.push(part(G.box, 0xffc83d, [sx * 6.2, 4, sz * 6.2], [3.2, 8, 3.2]));
+    const trim = new THREE.Mesh(merge(L), giantMats.trim);
+    trim.userData.own = true; trim.castShadow = false; g.add(trim);
+    g.traverse(m => { if (m.isMesh) m.castShadow = false; });   // a 610 m shadow would swallow the whole map
+    return g;
+  },
 };
 
 /* ---------------- ground ---------------- */
+// The city floor is split into GT x GT canvas tiles (each 2048 px): one giant texture would blow past iPad Safari's canvas limit.
 const groundMat = new THREE.MeshLambertMaterial({ color: 0xffffff }); patchGround(groundMat);
-const cityGround = new THREE.Mesh(new THREE.PlaneGeometry(CITY * 2, CITY * 2), groundMat);
-cityGround.rotation.x = -Math.PI / 2; cityGround.receiveShadow = true; scene.add(cityGround);
+const GT = 2, GS = 2048, GK = GS * GT / (CITY * 2), GX = v => (v + CITY) * GK;
+const groundTiles = [];
+for (let tz = 0; tz < GT; tz++) for (let tx = 0; tx < GT; tx++) {
+  const size = CITY * 2 / GT, mat = new THREE.MeshLambertMaterial({ color: 0xffffff }); patchGround(mat);
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(size, size), mat);
+  m.rotation.x = -Math.PI / 2; m.position.set(-CITY + size * (tx + .5), 0, -CITY + size * (tz + .5)); m.receiveShadow = true; scene.add(m);
+  const c = document.createElement('canvas'); c.width = c.height = GS;
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  mat.map = t;
+  groundTiles.push({ tx, tz, c, g: c.getContext('2d'), t });
+}
 {
-  const sh = new THREE.Shape(); sh.moveTo(-500, -500); sh.lineTo(500, -500); sh.lineTo(500, 500); sh.lineTo(-500, 500); sh.lineTo(-500, -500);
+  const F = 1200;
+  const sh = new THREE.Shape(); sh.moveTo(-F, -F); sh.lineTo(F, -F); sh.lineTo(F, F); sh.lineTo(-F, F); sh.lineTo(-F, -F);
   const hole = new THREE.Path(); const e = CITY - 0.5; hole.moveTo(-e, -e); hole.lineTo(-e, e); hole.lineTo(e, e); hole.lineTo(e, -e); hole.lineTo(-e, -e);
   sh.holes.push(hole);
   const outerMat = new THREE.MeshLambertMaterial({ color: 0x74c04e }); patchGround(outerMat);
@@ -565,16 +673,14 @@ cityGround.rotation.x = -Math.PI / 2; cityGround.receiveShadow = true; scene.add
   outer.rotation.x = -Math.PI / 2; outer.position.y = -0.02; outer.receiveShadow = true; scene.add(outer);
   // decorative forest ring outside the city
   const list = [];
-  for (let i = 0; i < 320; i++) {
-    const x = rand(-200, 200), z = rand(-200, 200);
-    if (Math.max(Math.abs(x), Math.abs(z)) < 95) continue;
-    list.push(placed(treeGeo(Math.random() < .4, pick(TREE_GREENS)), x, 0, z, rand(1.1, 2), rand(0, 6)));
+  for (let i = 0; i < 900; i++) {
+    const x = rand(-CITY - 170, CITY + 170), z = rand(-CITY - 170, CITY + 170);
+    if (Math.max(Math.abs(x), Math.abs(z)) < CITY + 14) continue;
+    list.push(placed(treeGeo(Math.random() < .4, pick(TREE_GREENS)), x, 0, z, rand(1.1, 2.2), rand(0, 6)));
   }
   const forest = new THREE.Mesh(merge(list), vcMat); scene.add(forest);
 }
 
-const GS = 2048, GK = GS / (CITY * 2), GX = v => (v + CITY) * GK;
-let groundCtx = null;
 function drawBlock(g, b) {
   const { bx, bz, type } = b, k = GK, X = GX;
   // pavement with a soft curb edge
@@ -585,7 +691,7 @@ function drawBlock(g, b) {
     g.beginPath(); g.moveTo(X(bx + t), X(bz - 10.8)); g.lineTo(X(bx + t), X(bz + 10.8)); g.stroke();
     g.beginPath(); g.moveTo(X(bx - 10.8), X(bz + t)); g.lineTo(X(bx + 10.8), X(bz + t)); g.stroke();
   }
-  const lot = { park: '#8ddc5c', houses: '#9be36a', tower: '#ffe9b0', downtown: '#dfe6f0', shops: '#e9e3f5' }[type];
+  const lot = { park: '#8ddc5c', houses: '#9be36a', tower: '#ffe9b0', giant: '#ffd98a', downtown: '#dfe6f0', shops: '#e9e3f5' }[type];
   g.fillStyle = 'rgba(0,0,0,0.08)'; g.fillRect(X(bx - 9), X(bz - 9) + 6, 18 * k, 18 * k);   // tiny drop edge
   g.fillStyle = lot; g.fillRect(X(bx - 9), X(bz - 9), 18 * k, 18 * k);
   if (type === 'park') {
@@ -608,23 +714,21 @@ function drawBlock(g, b) {
     }
   }
 }
-function makeGroundTexture(layout) {
-  const S = GS, k = GK, X = GX;
-  const c = document.createElement('canvas'); c.width = c.height = S;
-  const g = c.getContext('2d'); groundCtx = g;
+function drawCity(g, layout) {
+  const k = GK, X = GX, S = X(CITY);
   g.fillStyle = '#86d65e'; g.fillRect(0, 0, S, S);
   g.fillStyle = '#69707e';
   for (const L of ROADS) { g.fillRect(0, X(L - 4), S, 8 * k); g.fillRect(X(L - 4), 0, 8 * k, S); }
   // white edge lines along every road, broken at junctions
   g.fillStyle = 'rgba(255,255,255,0.8)';
-  for (const L of ROADS) for (const e of [-3.5, 3.5]) for (let t = -80; t < 80; t += 1) {
+  for (const L of ROADS) for (const e of [-3.5, 3.5]) for (let t = -CITY; t < CITY; t += 1) {
     if (ROADS.some(R => Math.abs(t + .5 - R) < 4.6)) continue;
     g.fillRect(X(t), X(L + e) - .08 * k, 1.02 * k, .16 * k);
     g.fillRect(X(L + e) - .08 * k, X(t), .16 * k, 1.02 * k);
   }
   for (const b of layout) drawBlock(g, b);
   g.fillStyle = '#ffffff';
-  for (const L of ROADS) for (let t = -80; t < 80; t += 4) {
+  for (const L of ROADS) for (let t = -CITY; t < CITY; t += 4) {
     if (ROADS.some(R => Math.abs(t + 1 - R) < 5.5)) continue;
     g.fillRect(X(t), X(L) - .13 * k, 2.2 * k, .26 * k);
     g.fillRect(X(L) - .13 * k, X(t), .26 * k, 2.2 * k);
@@ -632,23 +736,30 @@ function makeGroundTexture(layout) {
   g.fillStyle = 'rgba(255,255,255,0.92)';
   for (const rx of ROADS) for (const rz of ROADS) for (const s of [-1, 1]) {
     for (let w = -3.4; w < 3.5; w += 1) {
-      if (Math.abs(rx + s * 5.4) < 79) g.fillRect(X(rx + s * 5.4 - .7), X(rz + w), 1.4 * k, .55 * k);
-      if (Math.abs(rz + s * 5.4) < 79) g.fillRect(X(rx + w), X(rz + s * 5.4 - .7), .55 * k, 1.4 * k);
+      if (Math.abs(rx + s * 5.4) < CITY - 1) g.fillRect(X(rx + s * 5.4 - .7), X(rz + w), 1.4 * k, .55 * k);
+      if (Math.abs(rz + s * 5.4) < CITY - 1) g.fillRect(X(rx + w), X(rz + s * 5.4 - .7), .55 * k, 1.4 * k);
     }
   }
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
-  return t;
+}
+const miniBg = document.createElement('canvas'); miniBg.width = miniBg.height = 176;
+function makeGroundTexture(layout) {
+  const seed = Math.random();   // every tile draws the same random park decor
+  for (const T of groundTiles) {
+    T.g.setTransform(1, 0, 0, 1, -T.tx * GS, -T.tz * GS);
+    withRandom(mulberry32(seed * 4294967296), () => drawCity(T.g, layout));
+    T.t.needsUpdate = true;
+  }
+  const m = miniBg.getContext('2d'), s = miniBg.width / GT;
+  for (const T of groundTiles) m.drawImage(T.c, T.tx * s, T.tz * s, s, s);
+  m.fillStyle = 'rgba(30,15,70,.25)'; m.fillRect(0, 0, miniBg.width, miniBg.height);
 }
 
 /* ---------------- world objects ---------------- */
 let objects = [];
 let needsClean = false;
-let layout = [];          // the 25 city blocks
-let curBlock = null;      // block being filled (objects get tagged with it)
-let popIn = false;        // new objects grow in with a bounce (rebuilt blocks, returning traffic)
-let vehicleQueue = [];    // eaten vehicles come back after a while
+let layout = [];            // the NB x NB city blocks
+let objSeq = 0, objById = new Map(), totalObjs = 1, giantObj = null;
+let clk = 0;                // seconds since the round began: traffic is a pure function of it, so every player sees the same cars
 
 function spawn(kind, x, z, rotY = 0, move = null) {
   const d = DEF[kind];
@@ -656,15 +767,20 @@ function spawn(kind, x, z, rotY = 0, move = null) {
   const meta = grp.userData.meta || {};
   grp.position.set(x, 0, z); grp.rotation.y = rotY;
   scene.add(grp);
-  const o = { kind, grp, x, z, r: d.r, h: meta.h ?? d.h, pts: meta.pts ?? d.pts, label: d.label, color: d.color,
-    gold: false, state: 'idle', move, owner: null, wob: 0, wax: 1, waz: 0, baseQ: grp.quaternion.clone(), grow: 1,
-    block: curBlock, bgen: curBlock ? curBlock.gen : 0 };
-  if (curBlock) { curBlock.total++; curBlock.left++; }
-  if (popIn) { o.grow = -rand(0, .7); grp.scale.setScalar(.001); }
+  const o = { id: objSeq++, kind, grp, x, z, r: d.r, h: meta.h ?? d.h, pts: meta.pts ?? d.pts, label: d.label, color: d.color,
+    gold: false, state: 'idle', move, owner: null, wob: 0, wax: 1, waz: 0, baseQ: grp.quaternion.clone(), tiny: d.r < .5 };
+  if (move && move.type === 'lane') move.p0 = move.axis === 'x' ? x : z;
+  if (move && move.type === 'walk') move.s0 = move.s;
   if (GOLDABLE.has(kind) && Math.random() < .06) makeGold(o);
+  if (!move) {   // static props: bake matrices once instead of recomputing thousands every frame
+    grp.updateMatrixWorld(true);
+    grp.traverse(c => { c.matrixAutoUpdate = false; });
+  }
+  objById.set(o.id, o);
   objects.push(o);
   return o;
 }
+const dirty = o => { if (!o.grp.matrixAutoUpdate) o.grp.updateMatrix(); };
 function makeGold(o) {
   o.grp.traverse(m => { if (m.userData.vc) m.material = goldMat; });
   o.gold = true;
@@ -672,8 +788,8 @@ function makeGold(o) {
 function removeObj(o) {
   scene.remove(o.grp);
   o.grp.traverse(m => { if (m.userData.own && m.geometry) m.geometry.dispose(); });
-  if (o.block && o.bgen === o.block.gen) o.block.left--;
-  if (o.vehicle) vehicleQueue.push({ t: rand(8, 15) });
+  objById.delete(o.id);
+  if (o === giantObj) giantObj = null;
   o.state = 'gone';
   needsClean = true;
 }
@@ -687,13 +803,15 @@ function perim(cx, cz, s) { // walk loop along a block's sidewalk; s in [0,4)
   }
 }
 function roadPoint() {
-  const L = pick(ROADS), t = rand(-74, 74), off = rand(-2.5, 2.5);
+  const L = pick(ROADS), t = rand(-HALF + 5, HALF - 5), off = rand(-2.5, 2.5);
   return Math.random() < .5 ? [t, L + off] : [L + off, t];
 }
 
 function fillBlock(b) {
   const { bx, bz, type } = b;
-  if (type === 'tower') {
+  if (type === 'giant') {
+    giantObj = spawn('giant', bx, bz);
+  } else if (type === 'tower') {
     spawn('mega', bx, bz);
     for (const [sx, sz] of QUADS) {
       spawn('tree', bx + sx * 7.3, bz + sz * 7.3);
@@ -767,88 +885,51 @@ function fillBlock(b) {
   }
 }
 
-// Later in the round, rebuilt blocks lean toward bigger buildings so there's always something worth eating.
-function blockType(ring, prog = 0) {
-  if (ring === 0) return 'tower';
+// downtown in the middle (around the 2000 ft tower), suburbs and parks toward the edges
+function blockType(ring) {
   const r = Math.random();
-  if (ring === 1) return r < .5 + prog * .3 ? 'downtown' : r < .9 ? 'shops' : 'park';
-  return r < .2 * prog ? 'downtown' : r < .45 - prog * .2 ? 'houses' : r < .7 - prog * .2 ? 'park' : 'shops';
+  if (ring === 0) return 'giant';
+  if (ring === 1) return r < .55 ? 'downtown' : r < .9 ? 'shops' : 'park';
+  if (ring === 2) return r < .3 ? 'downtown' : r < .4 ? 'tower' : r < .72 ? 'shops' : r < .85 ? 'park' : 'houses';
+  if (ring === 3) return r < .1 ? 'downtown' : r < .14 ? 'tower' : r < .42 ? 'shops' : r < .78 ? 'houses' : 'park';
+  return r < .14 ? 'shops' : r < .7 ? 'houses' : 'park';
 }
-function fillTagged(b) {
-  b.gen = (b.gen || 0) + 1; b.total = 0; b.left = 0; b.emptyT = 0;
-  curBlock = b; fillBlock(b); curBlock = null;
-}
-function spawnVehicle(edge) {
-  const L = pick(ROADS), axis = pick(['x', 'z']), dir = pick([1, -1]);
-  const t = edge ? -dir * 84 : rand(-84, 84), lane = L + (dir > 0 ? -2 : 2);
+function spawnVehicle(t, L, axis, dir, speed) {
+  const lane = L + (dir > 0 ? -2 : 2);
   const kind = Math.random() < .18 ? 'bus' : 'car';
-  const move = { type: 'lane', axis, dir, speed: rand(4, 7.5) };
+  const move = { type: 'lane', axis, dir, speed };
   const o = axis === 'x' ? spawn(kind, t, lane, dir > 0 ? 0 : Math.PI, move)
                          : spawn(kind, lane, t, dir > 0 ? -Math.PI / 2 : Math.PI / 2, move);
   o.vehicle = true;
   return o;
 }
-function rebuildBlock(b) {
-  for (const o of objects) if (o.block === b && o.state === 'idle') removeObj(o);
-  b.type = blockType(b.ring, clamp((ROUND_TIME - timeLeft) / ROUND_TIME, 0, 1));
-  drawBlock(groundCtx, b); groundMat.map.needsUpdate = true;
-  popIn = true; fillTagged(b); popIn = false;
-  for (let i = 0; i < 24; i++) emit(b.bx + rand(-10, 10), .3, b.bz + rand(-10, 10), rand(-1, 1), rand(2, 5), rand(-1, 1), 0xffffff, rand(.6, 1.2), rand(.5, 1), 4);
-}
-let blockT = 0;
-function updateCity(dt) {
-  // eaten traffic drives back in from the edge of the map
-  vehicleQueue = vehicleQueue.filter(v => {
-    v.t -= dt;
-    if (v.t > 0) return true;
-    popIn = true; spawnVehicle(true); popIn = false;
-    return false;
-  });
-  // a block that's mostly been eaten gets rebuilt once no hole is standing in it
-  blockT -= dt; if (blockT > 0) return; blockT = 1;
-  for (const b of layout) {
-    if (b.left > b.total * .3) { b.emptyT = 0; continue; }
-    b.emptyT += 1;
-    if (b.emptyT < 12) continue;
-    if (holes.some(h => (h.alive || h.dying) && Math.max(Math.abs(h.x - b.bx), Math.abs(h.z - b.bz)) < 13 + h.R)) continue;
-    rebuildBlock(b);
-  }
-}
 
 function genCity() {
-  layout = [];
+  layout = []; objSeq = 0; objById = new Map(); giantObj = null;
+  const C = (NB - 1) / 2;
   BLOCKS.forEach((bx, i) => BLOCKS.forEach((bz, j) => {
-    const ring = Math.max(Math.abs(i - 2), Math.abs(j - 2));
+    const ring = Math.max(Math.abs(i - C), Math.abs(j - C));
     layout.push({ bx, bz, ring, type: blockType(ring) });
   }));
+  let towers = layout.filter(b => b.type === 'tower').length;
+  while (towers < 4) { pick(layout.filter(b => (b.ring === 2 || b.ring === 3) && b.type !== 'tower')).type = 'tower'; towers++; }
   let parks = layout.filter(b => b.type === 'park').length;
-  while (parks < 3) { const b = pick(layout.filter(b => b.type === 'houses' || b.type === 'shops')); b.type = 'park'; parks++; }
-  if (!layout.some(b => b.type === 'downtown')) pick(layout.filter(b => b.type === 'shops')).type = 'downtown';
+  while (parks < 14) { pick(layout.filter(b => b.type === 'houses' || b.type === 'shops')).type = 'park'; parks++; }
 
-  if (groundMat.map) groundMat.map.dispose();
-  groundMat.map = makeGroundTexture(layout); groundMat.needsUpdate = true;
-
-  layout.forEach(fillTagged);
-  vehicleQueue = [];
+  makeGroundTexture(layout);
+  layout.forEach(fillBlock);
 
   // cones on the roads
-  for (let i = 0; i < 36; i++) {
-    const L = pick(ROADS), t = rand(-74, 74), off = pick([-3.3, 3.3]);
+  for (let i = 0; i < 170; i++) {
+    const L = pick(ROADS), t = rand(-HALF + 5, HALF - 5), off = pick([-3.3, 3.3]);
     if (Math.random() < .5) spawn('cone', t, L + off); else spawn('cone', L + off, t);
   }
   // traffic
   for (const L of ROADS) for (const axis of ['x', 'z']) for (const dir of [1, -1]) {
-    const n = randi(1, 2), start = rand(-84, 84), speed = rand(4, 7.5);
-    for (let k = 0; k < n; k++) {
-      const t = ((start + k * (168 / n)) + 84) % 168 - 84;
-      const lane = L + (dir > 0 ? -2 : 2);
-      const kind = Math.random() < .18 ? 'bus' : 'car';
-      const move = { type: 'lane', axis, dir, speed };
-      const o = axis === 'x' ? spawn(kind, t, lane, dir > 0 ? 0 : Math.PI, move)
-                             : spawn(kind, lane, t, dir > 0 ? -Math.PI / 2 : Math.PI / 2, move);
-      o.vehicle = true;
-    }
+    const n = randi(2, 4), start = rand(-WRAP, WRAP), speed = rand(4, 7.5);
+    for (let k = 0; k < n; k++) spawnVehicle(((start + k * (2 * WRAP / n)) + WRAP) % (2 * WRAP) - WRAP, L, axis, dir, speed);
   }
+  totalObjs = objects.length;
 }
 
 /* ---------------- holes ---------------- */
@@ -876,14 +957,18 @@ function makeTubeMat(color) {
   });
 }
 
-const HOLE_DEFS = [
+const SP_HOLES = [
   { name: 'YOU', color: 0x8a5cff, player: true },
   { name: 'Sir Slurpsalot', color: 0xff4f9a },
   { name: 'Munchbot 3000', color: 0x1ed6c0 },
   { name: "Gobblin' Greta", color: 0xffa020 },
 ];
-const START_POS = [[-15, 15], [15, -15], [-45, -45], [45, 45]];
-const holes = HOLE_DEFS.map((def, i) => {
+const SP_STARTS = [[-15, 15], [45, -45], [-75, -45], [75, 75]];
+const MP_COLORS = [0x8a5cff, 0xff4f9a, 0x1ed6c0, 0xffa020, 0x3d8bff, 0xe53935, 0x43d14a, 0xffd23f, 0xff7ac8, 0x00b8d9,
+  0xa0522d, 0x9be62a, 0xff6f3c, 0xb388ff, 0x20b2aa, 0xc2185b, 0x6b8e23, 0xffffff, 0x4682b4, 0x333344];
+let holes = [], player = null;
+
+function makeHole(def) {
   const grp = new THREE.Group(); scene.add(grp);
   const tm = makeTubeMat(def.color);
   const tube = new THREE.Mesh(tubeGeo, tm); tube.frustumCulled = false; grp.add(tube);
@@ -895,28 +980,44 @@ const holes = HOLE_DEFS.map((def, i) => {
   const tag = document.createElement('div'); tag.className = 'tag';
   const css = '#' + new THREE.Color(def.color).getHexString();
   tag.style.background = css; tag.textContent = def.name; $('tags').appendChild(tag);
-  return { i, name: def.name, baseColor: new THREE.Color(def.color), css, isPlayer: !!def.player, grp, tm, rimMat, rim, mag, tag,
-    x: 0, z: 0, vx: 0, vz: 0, R: LEVELS[0].R, level: 0, growth: 0, score: 0, alive: true, dying: false,
+  if (def.color === 0xffffff) { tag.style.color = '#2a1a5e'; tag.style.textShadow = 'none'; }
+  return { name: def.name, baseColor: new THREE.Color(def.color), css, isPlayer: !!def.player, remote: !!def.remote, pid: def.pid || null,
+    grp, tm, rimMat, rim, mag, tag,
+    x: 0, z: 0, vx: 0, vz: 0, R: LEVELS[0].R, level: 0, growth: 0, score: 0, alive: true, dying: false, lv: 0,
     respawnT: 0, frozenT: 0, speedT: 0, magnetT: 0, shield: 0, spd: rand(.8, .88), caution: rand(.6, .95), lazy: rand(.15, .28),
-    aiT: 0, mode: 'wander', target: null, tk: null, wx: 0, wz: 0, fx: 0, fz: 0, chkT: 0, cx: 0, cz: 0, stuckT: 0, sdx: 0, sdz: 0 };
-});
-const player = holes[0];
+    aiT: 0, mode: 'wander', target: null, tk: null, wx: 0, wz: 0, fx: 0, fz: 0, chkT: 0, cx: 0, cz: 0, stuckT: 0, sdx: 0, sdz: 0,
+    nx: 0, nz: 0, nvx: 0, nvz: 0, nR: LEVELS[0].R, netT: 0 };
+}
+function destroyHole(h) {
+  scene.remove(h.grp); h.tm.dispose(); h.rimMat.dispose(); h.mag.material.dispose(); h.tag.remove();
+}
+function setHoles(defs) {
+  holes.forEach(destroyHole);
+  holes = defs.map(makeHole);
+  player = holes.find(h => h.isPlayer);
+}
+function removeHole(h) {
+  destroyHole(h);
+  holes = holes.filter(o => o !== h);
+  for (const o of objects) if (o.state === 'fall' && o.owner === h) removeObj(o);
+}
 
 function targetRadius(h) {
   const L = LEVELS[h.level], N = LEVELS[h.level + 1];
   if (!N) return L.R;
-  return L.R + (N.R - L.R) * 0.3 * clamp((h.growth - L.need) / (N.need - L.need), 0, 1);
+  return L.R + (N.R - L.R) * 0.5 * clamp((h.growth - L.need) / (N.need - L.need), 0, 1);
 }
-function resetHoles() {
+function resetHoles(starts) {
   holes.forEach((h, i) => {
-    h.x = START_POS[i][0]; h.z = START_POS[i][1]; h.vx = h.vz = 0;
-    h.level = 0; h.growth = 0; h.keep = 0; h.score = 0; h.R = LEVELS[0].R;
+    h.x = h.nx = starts[i][0]; h.z = h.nz = starts[i][1]; h.vx = h.vz = h.nvx = h.nvz = 0;
+    h.level = 0; h.growth = 0; h.keep = 0; h.score = 0; h.R = h.nR = LEVELS[0].R; h.lv = 0;
     h.alive = true; h.dying = false; h.frozenT = h.speedT = h.magnetT = 0; h.shield = 0;
     h.aiT = 0; h.stuckT = 0; h.grp.visible = true;
   });
 }
 function addPoints(h, pts) {
-  // catch-up: any hole under half the leader's size earns 1.5x, so nobody runs away with a 10-minute round
+  if (h.remote) return;   // remote players score on their own screens and tell us
+  // catch-up: any hole under half the leader's size earns 1.5x, so nobody runs away with the game
   if (state === 'play' && h.growth < .5 * Math.max(...holes.map(o => o.growth))) pts = Math.round(pts * 1.5);
   h.score += pts; h.growth += pts;
   while (h.level < LEVELS.length - 1 && h.growth >= LEVELS[h.level + 1].need) { h.level++; onLevelUp(h); }
@@ -940,17 +1041,19 @@ function respawnHole(h) {
   h.x = best[0]; h.z = best[1]; h.vx = h.vz = 0;
   h.growth = h.keep || 0; h.keep = 0; h.level = 0;
   while (h.level < LEVELS.length - 1 && h.growth >= LEVELS[h.level + 1].need) h.level++;
-  h.R = targetRadius(h);   // comes back with some of its size (rounds are long)
+  h.R = targetRadius(h);   // comes back with some of its size
   h.alive = true; h.dying = false; h.shield = 2.5; h.grp.visible = true; h.aiT = 0;
   ringFX(h.x, h.z, 1, h.baseColor);
   if (h.isPlayer && state === 'play') banner('BACK IN THE GAME!', '#c3a6ff', 1.4);
 }
-function eatHole(a, b) {
+// a swallows b. Returns the points it was worth. In multiplayer the victim decides (it's the one that knows where it really is).
+function eatHole(a, b, pts) {
+  if (pts == null) pts = 25 + Math.floor(b.growth * 0.4);
   b.alive = false; b.dying = true; b.dieT = 0; b.dieR = b.R; b.eater = a; b.respawnT = 3;
   for (const o of objects) if (o.state === 'fall' && o.owner === b) removeObj(o);
-  const pts = 25 + Math.floor(b.growth * 0.4);
   addPoints(a, pts);
-  b.keep = Math.floor(b.growth * .4); b.growth = 0; b.level = 0; b.speedT = b.magnetT = b.frozenT = 0;
+  if (!b.remote) { b.keep = Math.floor(b.growth * .4); b.growth = 0; b.level = 0; }
+  b.speedT = b.magnetT = b.frozenT = 0;
   burst(b.x, .4, b.z, b.baseColor.getHex(), 45, 8, .6);
   if (a.isPlayer && state === 'play') {
     popup(b.x, 1, b.z, `+${pts} GULP!`, 'big');
@@ -961,6 +1064,7 @@ function eatHole(a, b) {
     banner(`Gulped by ${a.name}! Respawning…`, '#ff6b6b', 2.8);
     sfx.gulped(); shake = Math.max(shake, 1.3);
   }
+  return pts;
 }
 
 /* ---------------- power-ups ---------------- */
@@ -985,10 +1089,11 @@ const puIconGeo = {
     part(G.ico, 0xffffff, [0, 0, 0], [.25, .25, .25])]),
 };
 const puIconMat = new THREE.MeshBasicMaterial({ vertexColors: true });
-let powerups = [], puTimer = 4;
-function spawnPU() {
-  const type = pick(Object.keys(PU));
-  const [x, z] = roadPoint();
+let powerups = [], puTimer = 4, puSeq = 0;
+// In multiplayer one player (the "authority") rolls power-ups and tells everyone else where they are.
+function spawnPU(type = pick(Object.keys(PU)), x, z, id) {
+  if (x == null) [x, z] = roadPoint();
+  if (id == null) id = (net.myId || 'sp') + ':' + (puSeq++);
   const icon = new THREE.Mesh(puIconGeo[type], puIconMat); icon.position.y = 1.4; icon.scale.setScalar(1.3);
   const glowMat = new THREE.MeshBasicMaterial({ color: PU[type].color, transparent: true, opacity: .55, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
   patchGround(glowMat);
@@ -996,7 +1101,9 @@ function spawnPU() {
   const beam = new THREE.Mesh(new THREE.CylinderGeometry(.9, .9, 3, 16, 1, true), glowMat); beam.position.y = 1.5; beam.scale.set(1, 1, 1);
   beam.material = glowMat.clone(); beam.material.opacity = .12;
   const grp = grpOf(icon, glow, beam); grp.position.set(x, 0, z); scene.add(grp);
-  powerups.push({ type, x, z, grp, icon, t: 0, life: 25, dead: false });
+  const p = { id, type, x, z, grp, icon, t: 0, life: 30, dead: false };
+  powerups.push(p);
+  return p;
 }
 function applyPU(h, p) {
   const T = PU[p.type];
@@ -1010,7 +1117,10 @@ function applyPU(h, p) {
 }
 function updatePU(dt, time) {
   puTimer -= dt;
-  if (puTimer <= 0) { puTimer = rand(5, 9); if (powerups.length < 5) spawnPU(); }
+  if (puTimer <= 0 && isPuAuthority()) {
+    puTimer = rand(3, 6);
+    if (powerups.length < 12) { const p = spawnPU(); if (net.inGame) netSend('pu', { id: p.id, type: p.type, x: p.x, z: p.z }); }
+  }
   for (const p of powerups) {
     p.t += dt;
     const s = Math.min(1, p.t * 3) * Math.min(1, Math.max(0, p.life - p.t));
@@ -1019,8 +1129,12 @@ function updatePU(dt, time) {
     p.icon.position.y = 1.4 + Math.sin(time * 3 + p.x) * .25;
     if (p.t > p.life) { p.dead = true; continue; }
     for (const h of holes) {
-      if (!h.alive) continue;
-      if (Math.hypot(h.x - p.x, h.z - p.z) < h.R + .9) { applyPU(h, p); p.dead = true; break; }
+      if (!h.alive || h.remote) continue;   // remote players' pickups arrive as messages
+      if (Math.hypot(h.x - p.x, h.z - p.z) < h.R + .9) {
+        applyPU(h, p); p.dead = true;
+        if (net.inGame) netSend('pick', { id: p.id, type: p.type });
+        break;
+      }
     }
   }
   powerups = powerups.filter(p => {
@@ -1119,14 +1233,16 @@ function updatePops(dt) {
 function updateTags() {
   let leader = holes[0]; for (const h of holes) if (h.score > leader.score) leader = h;
   for (const h of holes) {
-    const show = state !== 'menu' && h.alive;
+    const show = (state === 'play' || state === 'over') && h.alive;
     if (!show) { h.tag.style.display = 'none'; continue; }
     _p.set(h.x, 0, h.z - h.R * 1.15).project(camera);
     if (_p.z > 1) { h.tag.style.display = 'none'; continue; }
     h.tag.style.display = 'block';
     const crown = leader === h && h.score > 0 ? '👑 ' : '';
     const fr = h.frozenT > 0 ? ' ❄️' : '';
-    const txt = crown + h.name + fr;
+    // 🍽️ = you're big enough to gulp them, ⚠️ = they can gulp you
+    const tip = h.isPlayer || state !== 'play' ? '' : canEatHole(player, h) ? ' 🍽️' : canEatHole(h, player) ? ' ⚠️' : '';
+    const txt = crown + h.name + fr + tip;
     if (h.tag.textContent !== txt) h.tag.textContent = txt;
     h.tag.style.transform = `translate(${(_p.x * .5 + .5) * innerWidth}px,${(-_p.y * .5 + .5) * innerHeight}px) translate(-50%,-100%)`;
   }
@@ -1192,10 +1308,11 @@ $('mute').addEventListener('click', e => { e.stopPropagation(); initAudio(); tog
 /* ---------------- input ---------------- */
 const keys = {};
 addEventListener('keydown', e => {
+  if (e.target && e.target.tagName === 'INPUT') { if (e.code === 'Enter') $('mpGo').click(); return; }
   keys[e.code] = true;
   if (e.code === 'KeyM') toggleMute();
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
-  if ((e.code === 'Enter' || e.code === 'Space') && state !== 'play' && !overLock) startGame();
+  if ((e.code === 'Enter' || e.code === 'Space') && !overLock && (state === 'menu' || (state === 'over' && mode === 'sp'))) startGame();
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
@@ -1236,27 +1353,27 @@ function inputDir() {
 function aiThink(h) {
   let fx = 0, fz = 0, threat = 0;
   for (const o of holes) {
-    if (o === h || !o.alive || o.R <= h.R * 1.12) continue;
+    if (o === h || !o.alive || !canEatHole(o, h)) continue;
     const dx = h.x - o.x, dz = h.z - o.z, d = Math.hypot(dx, dz) || 1, danger = o.R * 2.2 + 8;
     if (d < danger) { const w = (danger - d) / danger; fx += dx / d * w; fz += dz / d * w; threat += w; }
   }
   if (h.shield <= 0 && threat > .15 && Math.random() < h.caution) {
     const L = Math.hypot(fx, fz) || 1; h.mode = 'flee'; h.fx = fx / L; h.fz = fz / L;
-    if (Math.abs(h.x) > 70) h.fx -= Math.sign(h.x) * .8;
-    if (Math.abs(h.z) > 70) h.fz -= Math.sign(h.z) * .8;
+    if (Math.abs(h.x) > HALF - 9) h.fx -= Math.sign(h.x) * .8;
+    if (Math.abs(h.z) > HALF - 9) h.fz -= Math.sign(h.z) * .8;
     return;
   }
   let best = null, bs = 0, tk = null;
   for (const o of holes) {
-    if (o === h || !o.alive || o.shield > 0 || h.R <= o.R * 1.18) continue;
+    if (o === h || !o.alive || o.shield > 0 || !canEatHole(h, o)) continue;
     const d = Math.hypot(o.x - h.x, o.z - h.z);
     if (d < 30) { const s = (30 + o.growth * .3) / (d + 4); if (s > bs) { bs = s; best = o; tk = 'hole'; } }
   }
-  const lim = h.R * EAT;
+  const lim = frenzy ? 1e9 : h.R * EAT, far = objects.length < 300 ? 1e9 : 1600;   // late game: look across the whole map
   for (const o of objects) {
     if (o.state !== 'idle' || o.r > lim) continue;
     const dx = o.x - h.x, dz = o.z - h.z, d2 = dx * dx + dz * dz;
-    if (d2 > 1600) continue;
+    if (d2 > far) continue;
     const s = o.pts * (o.gold ? 5 : 1) / (Math.sqrt(d2) + 3) * rand(.3, 1.7);
     if (s > bs) { bs = s; best = o; tk = 'obj'; }
   }
@@ -1299,10 +1416,10 @@ function aiDir(h, dt) {
 function moveObj(o, dt, time) {
   const m = o.move;
   if (m.type === 'lane') {
-    if (m.axis === 'x') { o.x += m.dir * m.speed * dt; if (o.x > 84) o.x -= 168; else if (o.x < -84) o.x += 168; }
-    else { o.z += m.dir * m.speed * dt; if (o.z > 84) o.z -= 168; else if (o.z < -84) o.z += 168; }
+    const W2 = 2 * WRAP, p = (((m.p0 + WRAP + m.dir * m.speed * clk) % W2) + W2) % W2 - WRAP;
+    if (m.axis === 'x') o.x = p; else o.z = p;
   } else if (m.type === 'walk') {
-    m.s = (m.s + m.dir * m.speed * dt / 19.6 + 4) % 4;
+    m.s = (((m.s0 + m.dir * m.speed * clk / 19.6) % 4) + 4) % 4;
     const [px, pz] = perim(m.cx, m.cz, m.s), dx = px - o.x, dz = pz - o.z;
     o.x = px; o.z = pz;
     if (dx || dz) o.grp.rotation.y = Math.atan2(dx, dz);
@@ -1328,10 +1445,11 @@ function startFall(o, h) {
   o.spin = rand(-1.5, 1.5); o.spinA = 0;
   if (o.move) o.baseQ.setFromAxisAngle(UP, o.grp.rotation.y);
   o.move = null;
-  o.grow = 1; o.grp.scale.setScalar(1);
+  o.grp.matrixAutoUpdate = true; o.grp.visible = true;
 }
 function finishEat(o, h) {
   removeObj(o);
+  if (h.isPlayer && net.inGame) net.eaten.push(o.id);
   const pts = o.pts * (o.gold ? 5 : 1);
   addPoints(h, pts);
   burst(h.x, .3, h.z, o.gold ? 0xffd54a : o.color, Math.min(34, 6 + o.r * 6), 2.5 + o.r * 1.4, .22 + o.r * .1);
@@ -1364,27 +1482,22 @@ function updateObjects(dt, time) {
   for (const o of objects) {
     if (o.state === 'fall') { updateFall(o, dt); continue; }
     if (o.state !== 'idle') continue;
-    if (o.grow < 1) {   // springy pop-in for newly built things
-      o.grow = Math.min(1, o.grow + dt * 1.8);
-      const t = Math.max(0, o.grow) - 1;
-      o.grp.scale.setScalar(Math.max(.001, 1 + 2.7 * t * t * t + 1.7 * t * t));
-    }
     if (o.move) moveObj(o, dt, time);
     let wob = 0;
     for (const h of holes) {
       if (!h.alive) continue;
       let dx = o.x - h.x, dz = o.z - h.z, d2 = dx * dx + dz * dz;
-      if (o.r <= h.R * EAT) {
+      if (frenzy || o.r <= h.R * EAT) {
         if (h.magnetT > 0) {
           const MR = h.R * 3 + 3;
           if (d2 < MR * MR && d2 > 1e-4) {
             const d = Math.sqrt(d2), pull = Math.min(d, (3 + h.R * 1.6) * dt);
             o.move = null; o.x -= dx / d * pull; o.z -= dz / d * pull;
-            o.grp.position.x = o.x; o.grp.position.z = o.z;
+            o.grp.position.x = o.x; o.grp.position.z = o.z; dirty(o);
             dx = o.x - h.x; dz = o.z - h.z; d2 = dx * dx + dz * dz;
           }
         }
-        const lim = h.R - o.r * .4;
+        const lim = o.r > h.R * EAT ? h.R * .75 : h.R - o.r * .4;   // (frenzy: even huge things fall in)
         if (d2 < lim * lim) { startFall(o, h); break; }
         const edge = h.R + o.r * .55;
         if (d2 < edge * edge) {             // teetering on the rim
@@ -1405,7 +1518,7 @@ function updateObjects(dt, time) {
         o.wob += (target - o.wob) * k;
         _v.set(-o.waz, 0, o.wax);
         _q1.setFromAxisAngle(_v, o.wob * (1 + Math.sin(time * 20) * .15));
-        o.grp.quaternion.copy(_q1).multiply(o.baseQ);
+        o.grp.quaternion.copy(_q1).multiply(o.baseQ); dirty(o);
       }
     }
   }
@@ -1423,7 +1536,19 @@ function updateHoles(dt, time) {
       if (f >= 1) { h.dying = false; h.grp.visible = false; }
       continue;
     }
-    if (!h.alive) { h.respawnT -= dt; if (h.respawnT <= 0) respawnHole(h); continue; }
+    if (h.remote) {   // other players: glide toward where their last message says they are (+ a little extrapolation)
+      if (!h.alive) continue;
+      const age = Math.min(.3, (performance.now() - h.netT) / 1000);
+      const tx = h.nx + h.nvx * age, tz = h.nz + h.nvz * age;
+      if (Math.hypot(tx - h.x, tz - h.z) > 25) { h.x = tx; h.z = tz; }
+      const k = 1 - Math.exp(-dt * 12);
+      h.x += (tx - h.x) * k; h.z += (tz - h.z) * k; h.vx = h.nvx; h.vz = h.nvz;
+      h.R += (h.nR - h.R) * (1 - Math.exp(-dt * 6));
+      h.frozenT = Math.max(0, h.frozenT - dt); h.speedT = Math.max(0, h.speedT - dt);
+      h.magnetT = Math.max(0, h.magnetT - dt); h.shield = Math.max(0, h.shield - dt);
+      continue;
+    }
+    if (!h.alive) { h.respawnT -= dt; if (h.respawnT <= 0) { respawnHole(h); if (h.isPlayer && net.inGame) netState(true); } continue; }
     let [mx, mz] = (h.isPlayer && state === 'play') ? inputDir() : aiDir(h, dt);
     if (h.frozenT > 0) { h.frozenT -= dt; mx = mz = 0; if (Math.random() < .3) emit(h.x + rand(-h.R, h.R), 1.5, h.z + rand(-h.R, h.R), 0, -1, 0, 0xffffff, .25, 1, 1); }
     h.speedT = Math.max(0, h.speedT - dt); h.magnetT = Math.max(0, h.magnetT - dt); h.shield = Math.max(0, h.shield - dt);
@@ -1441,21 +1566,25 @@ function updateHoles(dt, time) {
 function holeVsHole() {
   for (let i = 0; i < holes.length; i++) for (let j = i + 1; j < holes.length; j++) {
     const a = holes[i], b = holes[j];
-    if (!a.alive || !b.alive) continue;
+    if (!a.alive || !b.alive || (a.remote && b.remote)) continue;
+    const mp = a.remote || b.remote;   // multiplayer: only the victim's own screen decides it got gulped
     const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz) || .01;
-    const aBig = a.R > b.R * 1.15, bBig = b.R > a.R * 1.15;
-    if (aBig && b.shield <= 0 && d < a.R - b.R * .25) { eatHole(a, b); continue; }
-    if (bBig && a.shield <= 0 && d < b.R - a.R * .25) { eatHole(b, a); continue; }
+    const aBig = canEatHole(a, b), bBig = canEatHole(b, a);
+    if (aBig && b.shield <= 0 && d < a.R - b.R * .25) { if (!mp) eatHole(a, b); else if (b.isPlayer) netGulpedBy(a); continue; }
+    if (bBig && a.shield <= 0 && d < b.R - a.R * .25) { if (!mp) eatHole(b, a); else if (a.isPlayer) netGulpedBy(b); continue; }
     const minD = (a.R + b.R) * .8;
     if (!aBig && !bBig && d < minD) {
-      const p = (minD - d) / 2; a.x -= dx / d * p; a.z -= dz / d * p; b.x += dx / d * p; b.z += dz / d * p;
+      const p = (minD - d) / (mp ? 1 : 2);
+      if (!a.remote) { a.x -= dx / d * p; a.z -= dz / d * p; }
+      if (!b.remote) { b.x += dx / d * p; b.z += dz / d * p; }
     }
   }
 }
 function syncHoles(time) {
+  for (let i = holes.length; i < HMAX; i++) holeUniform.value[i].set(0, 0, 0, 0);
   holes.forEach((h, i) => {
     const vis = h.alive || h.dying;
-    holeUniform.value[i].set(h.x, h.z, vis ? h.R : 0, 0);
+    if (i < HMAX) holeUniform.value[i].set(h.x, h.z, vis ? h.R : 0, 0);
     if (!vis) return;
     h.grp.position.set(h.x, 0, h.z);
     h.grp.scale.set(h.R, 1, h.R);
@@ -1500,12 +1629,12 @@ function setDay(p, dt) {
 
 /* ---------------- camera ---------------- */
 const camBase = new THREE.Vector3(0, 30, 30), camLook = new THREE.Vector3();
-let shake = 0, menuT = 0;
+let shake = 0, menuT = 0, camH = 20, giantFade = 1;
 function updateCamera(dt) {
   let H;
-  if (state === 'menu') {
-    menuT += dt; const a = menuT * .06;
-    camBase.set(Math.sin(a) * 95, 72, Math.cos(a) * 95); camLook.set(0, 0, 0); H = 90;
+  if (state === 'menu' || state === 'lobby') {
+    menuT += dt; const a = menuT * .05;
+    camBase.set(Math.sin(a) * 240, 150, Math.cos(a) * 240); camLook.set(0, 50, 0); H = 150;
   } else {
     const aspectK = camera.aspect < 1 ? 1.45 : 1;
     H = (12 + player.R * 5.2) * aspectK;
@@ -1513,46 +1642,91 @@ function updateCamera(dt) {
     camBase.lerp(_v.set(player.x, H, player.z + H * .72), k);
     camLook.lerp(_v.set(player.x, 0, player.z - H * .04), 1 - Math.exp(-dt * 6));
   }
+  camH = H;
   const sx = (Math.random() - .5) * shake * 1.2, sy = (Math.random() - .5) * shake * 1.2, sz = (Math.random() - .5) * shake * 1.2;
   camera.position.set(camBase.x + sx, camBase.y + sy, camBase.z + sz);
   camera.lookAt(camLook.x + sx * .5, camLook.y, camLook.z + sz * .5);
   shake *= Math.exp(-dt * 5); if (shake < .01) shake = 0;
-  scene.fog.near = H * 1.6; scene.fog.far = H * 4 + 90;
+  scene.fog.near = H * 1.6; scene.fog.far = Math.max(H * 4 + 90, 320);
   // shadows follow the view
   const S = clamp(H * 1.3, 25, 130), sc = sun.shadow.camera;
   if (Math.abs(sc.right - S) > .5) { sc.left = -S; sc.right = S; sc.top = S; sc.bottom = -S; sc.updateProjectionMatrix(); }
   sun.target.position.copy(camLook);
   sun.position.copy(camLook).addScaledVector(sunDir, 130);
+  // the 2000 ft tower turns see-through when it stands between the camera and you
+  let want = 1;
+  if (giantObj && giantObj.state === 'idle' && state === 'play') {
+    const ax = camera.position.x, az = camera.position.z, bx = player.x - ax, bz = player.z - az;
+    const L2 = bx * bx + bz * bz || 1, t = clamp(((giantObj.x - ax) * bx + (giantObj.z - az) * bz) / L2, 0, 1);
+    if (Math.hypot(ax + bx * t - giantObj.x, az + bz * t - giantObj.z) < 12 + player.R && t > 0 && t < 1.05) want = .22;
+  }
+  giantFade += (want - giantFade) * (1 - Math.exp(-dt * 6));
+  for (const m of [giantMats.body, giantMats.trim]) { m.opacity = giantFade; m.depthWrite = giantFade > .97; }
 }
 
-/* ---------------- HUD ---------------- */
+/* ---------------- HUD + minimap ---------------- */
 const stats = { biggest: null, eaten: 0, gulped: 0 };
-let lastTick = -1;
+const fmtT = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+// can hole a swallow hole b? Being a whole size bigger always counts, even if the radii are close.
+function canEatHole(a, b) { return a.R > b.R * 1.1 || (a.level > b.level && a.R > b.R * 1.02); }
 function updHUD() {
   const P = player, L = LEVELS[P.level], N = LEVELS[P.level + 1];
   $('score').textContent = P.score.toLocaleString();
   $('sizeName').textContent = `SIZE ${P.level + 1} · ${L.name}`;
   $('sizeBar').style.width = (N ? clamp((P.growth - L.need) / (N.need - L.need), 0, 1) * 100 : 100) + '%';
-  $('canEat').textContent = 'Can now eat: ' + L.eats;
-  const t = Math.max(0, Math.ceil(timeLeft));
-  $('timer').textContent = `${dayIcon} ${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
-  $('timer').classList.toggle('low', t <= 10);
+  $('canEat').textContent = frenzy ? '🔥 FINAL FRENZY: eat anything!' : 'Can now eat: ' + L.eats;
+  const pct = Math.floor((1 - objects.length / totalObjs) * 100);
+  $('timer').innerHTML = `${dayIcon} ${fmtT(gameT)}<small>${pct}% OF THE CITY GULPED · ${objects.length.toLocaleString()} LEFT</small>`;
   const sorted = [...holes].sort((a, b) => b.score - a.score);
-  $('rows').innerHTML = sorted.map((h, i) =>
-    `<div class="row ${h.isPlayer ? 'me' : ''} ${h.alive ? '' : 'dead'}"><span>${i + 1}.</span><span class="dot" style="background:${h.css}"></span>` +
-    `<span>${h.isPlayer ? 'YOU' : h.name}${h.alive ? '' : ' 💀'}</span><span class="sc">${h.score.toLocaleString()}</span></div>`).join('');
+  let show = sorted.slice(0, 6);
+  if (!show.includes(P)) show = [...sorted.slice(0, 5), P];
+  $('rows').innerHTML = show.map(h => {
+    const i = sorted.indexOf(h), tip = h.isPlayer ? '' : canEatHole(P, h) ? ' 🍽️' : canEatHole(h, P) ? ' ⚠️' : '';
+    return `<div class="row ${h.isPlayer ? 'me' : ''} ${h.alive ? '' : 'dead'}"><span>${i + 1}.</span><span class="dot" style="background:${h.css}"></span>` +
+      `<span>${h.isPlayer ? 'YOU' : h.name}${h.alive ? '' : ' 💀'}${tip}</span><span class="sc">S${h.level + 1} · ${h.score.toLocaleString()}</span></div>`;
+  }).join('');
   let chips = '';
   if (P.magnetT > 0) chips += `<div class="chip" style="--c:#ff4d4d">🧲 ${P.magnetT.toFixed(1)}</div>`;
   if (P.speedT > 0) chips += `<div class="chip" style="--c:#f5b800">⚡ ${P.speedT.toFixed(1)}</div>`;
   if (P.frozenT > 0) chips += `<div class="chip" style="--c:#38bfe0">❄️ FROZEN ${P.frozenT.toFixed(1)}</div>`;
   $('chips').innerHTML = chips;
 }
+const miniC = $('mini'), miniG = miniC.getContext('2d');
+function drawMini(time) {
+  const S = miniC.width, k = S / (CITY * 2), M = v => (v + CITY) * k;
+  miniG.drawImage(miniBg, 0, 0, S, S);
+  miniG.fillStyle = 'rgba(255,255,255,.8)';
+  for (const o of objects) {
+    if (o.state !== 'idle' || o === giantObj) continue;
+    const s = o.r > 2.5 ? 3 : o.r > 1 ? 2 : 1;
+    miniG.fillRect(M(o.x) - s / 2, M(o.z) - s / 2, s, s);
+  }
+  if (giantObj) {
+    miniG.font = 'bold 15px sans-serif'; miniG.textAlign = 'center'; miniG.textBaseline = 'middle';
+    miniG.fillStyle = '#2a1a5e'; miniG.fillText('★', M(giantObj.x) + 1, M(giantObj.z) + 1);
+    miniG.fillStyle = '#ffd23f'; miniG.fillText('★', M(giantObj.x), M(giantObj.z));
+  }
+  for (const h of [...holes.filter(o => !o.isPlayer), player]) {
+    if (!h.alive) continue;
+    const r = Math.max(h.isPlayer ? 4.5 : 3.5, h.R * k);
+    miniG.beginPath(); miniG.arc(M(h.x), M(h.z), r, 0, 7);
+    miniG.fillStyle = h.css; miniG.fill();
+    miniG.lineWidth = h.isPlayer ? 2.5 : 1.5; miniG.strokeStyle = h.isPlayer ? '#ffe66d' : '#fff'; miniG.stroke();
+    if (h.isPlayer) {
+      miniG.beginPath(); miniG.arc(M(h.x), M(h.z), r + 3 + (time * 6 % 5), 0, 7);
+      miniG.strokeStyle = 'rgba(255,230,109,.6)'; miniG.lineWidth = 1.5; miniG.stroke();
+    }
+  }
+}
 
 /* ---------------- game flow ---------------- */
-let state = 'menu', timeLeft = ROUND_TIME, hudT = 0, overLock = false;
+let frenzy = false;   // last ~3% of the city: everything becomes edible so every game can finish
+let state = 'menu', mode = 'sp', hudT = 0, miniT = 0, lodT = 0, overLock = false, gameT = 0;
 const bestKey = 'gulpcity_best';
 const getBest = () => +(localStorage.getItem(bestKey) || 0);
 function showBest() { const b = getBest(); $('best').textContent = b ? `🏆 Best score: ${b.toLocaleString()}` : ''; }
+const screens = ['menu', 'mp', 'over', 'hud', 'quit', 'ask'];
+function only(...ids) { for (const s of screens) $(s).classList.toggle('hidden', !ids.includes(s)); }
 
 function clearWorld() {
   for (const o of objects) if (o.state !== 'gone') removeObj(o);
@@ -1564,34 +1738,341 @@ function clearWorld() {
   pops.forEach(p => p.el.remove()); pops = [];
   pLife.fill(0);
 }
-function startGame() {
+// spread multiplayer starting spots around the city, each on a road
+function mpStarts(n) {
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const a = i / n * Math.PI * 2 + .4, rr = 60 + (i % 3) * 30;
+    let x = Math.cos(a) * rr, z = Math.sin(a) * rr;
+    const near = v => ROADS.reduce((b, R) => Math.abs(R - v) < Math.abs(b - v) ? R : b, ROADS[0]);
+    if (i % 2) x = near(x); else z = near(z);
+    out.push([x, z]);
+  }
+  return out;
+}
+function startGame(opts = {}) {
   initAudio();
-  clearWorld(); genCity(); resetHoles();
-  timeLeft = ROUND_TIME; puTimer = 3; lastTick = -1; shake = 0;
+  clearWorld();
+  if (opts.mp) {
+    mode = 'mp';
+    setHoles(opts.roster.map((p, i) => ({ name: p.name, color: MP_COLORS[i % MP_COLORS.length],
+      player: p.id === net.myId, remote: p.id !== net.myId, pid: p.id })));
+    withRandom(mulberry32(opts.seed), genCity);
+    resetHoles(mpStarts(holes.length));
+  } else {
+    mode = 'sp';
+    setHoles(SP_HOLES); genCity(); resetHoles(SP_STARTS);
+  }
+  frenzy = false; gameT = 0; clk = 0; puTimer = 3; puSeq = 0; shake = 0; giantFade = 1;
   stats.biggest = null; stats.eaten = 0; stats.gulped = 0;
   camBase.set(player.x, 30, player.z + 30); camLook.set(player.x, 0, player.z);
   state = 'play';
-  $('menu').classList.add('hidden'); $('over').classList.add('hidden'); $('hud').classList.remove('hidden');
-  banner('GULP!', '#ffe66d', 1.3); sfx.start();
+  only('hud', 'quit');
+  updHUD(); drawMini(0);
+  banner(mode === 'mp' ? `GULP! ${holes.length} players` : 'GULP!', '#ffe66d', 1.3); sfx.start();
 }
-function endGame() {
+function endGame(reason) {
+  if (state !== 'play') return;
   state = 'over'; overLock = true;
   touch.active = false; $('joy').classList.add('hidden');
   sfx.end();
   const sorted = [...holes].sort((a, b) => b.score - a.score);
   const rank = sorted.indexOf(player) + 1;
   const best = Math.max(getBest(), player.score); localStorage.setItem(bestKey, best);
-  $('rankText').textContent = rank === 1 ? '🏆 #1 — TOP GULPER OF THE CITY!' : `You finished #${rank} of ${holes.length}`;
+  $('overTitle').textContent = reason === 'eaten' ? 'CITY GULPED!' : 'GAME OVER';
+  const winner = sorted[0];
+  $('rankText').textContent = rank === 1 ? '🏆 #1 — TOP GULPER OF THE CITY!'
+    : `You finished #${rank} of ${holes.length} · ${winner.name} won`;
   $('rScore').textContent = player.score.toLocaleString();
   $('rSize').textContent = `${player.level + 1} · ${LEVELS[player.level].name}`;
-  $('rEaten').textContent = stats.eaten;
+  $('rEaten').textContent = stats.eaten.toLocaleString();
   $('rRivals').textContent = stats.gulped;
   $('rBig').textContent = stats.biggest ? stats.biggest.label : '—';
   $('rBest').textContent = best.toLocaleString();
-  setTimeout(() => { $('hud').classList.add('hidden'); $('over').classList.remove('hidden'); overLock = false; }, 900);
+  $('againBtn').classList.toggle('hidden', mode === 'mp');
+  if (mode === 'mp') netLeaveAll();
+  setTimeout(() => { only('over'); overLock = false; }, 900);
 }
-$('playBtn').addEventListener('click', startGame);
-$('againBtn').addEventListener('click', startGame);
+function toMenu() {
+  netLeaveAll(); frenzy = false;
+  clearWorld(); mode = 'sp'; setHoles(SP_HOLES); genCity(); resetHoles(SP_STARTS);
+  state = 'menu'; only('menu'); showBest();
+}
+$('playBtn').addEventListener('click', () => startGame());
+$('againBtn').addEventListener('click', () => startGame());
+$('menuBtn').addEventListener('click', toMenu);
+$('quit').addEventListener('click', e => { e.stopPropagation(); if (state === 'play') endGame('quit'); });
+
+/* ---------------- multiplayer ----------------
+   Peer-to-peer over WebRTC using Trystero (public relays only help players find each other; game data goes browser to browser).
+   - "lobby-v1" room: hosts advertise open games; seekers get asked "Join X's game?"
+   - "g-<code>" room: one game, up to 20 players. Host owns the roster and presses START.
+   In-game each player is the authority for its own hole: it streams its position/size and what it ate. */
+const TRYSTERO_URL = 'https://cdn.jsdelivr.net/npm/trystero@0.27.0/+esm';
+const NET_CFG = { appId: 'ty-robb.github.io/gulp-city', identity: 'none' };
+const MAXP = 20;
+const net = { lib: null, lobby: null, room: null, myId: null, inGame: false, isHost: false, started: false, myCode: null, gameCode: null,
+  name: 'Player', hostName: '', ads: new Map(), declined: new Set(), roster: [], hostPeer: null, prompt: null,
+  adTimer: 0, seekTimer: 0, A: {}, LA: {}, stT: 0, eaten: [], createdAt: 0, gen: 0 };
+const holeByPid = pid => holes.find(h => h.pid === pid);
+function netSend(name, data, target) {
+  const a = net.A[name];
+  if (a && net.room) a.send(data, target ? { target } : undefined).catch(() => {});
+}
+function isPuAuthority() {
+  if (!net.inGame) return true;
+  let min = net.myId; for (const h of holes) if (h.remote && h.pid < min) min = h.pid;
+  return min === net.myId;
+}
+function setStatus(html) { $('mpStatus').innerHTML = html; }
+function mpShow(view) {
+  $('mpNameRow').classList.toggle('hidden', view !== 'name');
+  $('mpPlayers').classList.toggle('hidden', view !== 'lobby');
+  $('mpStart').classList.toggle('hidden', !(view === 'lobby' && net.isHost));
+  if (view !== 'lobby') $('mpTitle').textContent = 'MULTIPLAYER';
+  if (view === 'name') setStatus('');
+}
+function openMP() {
+  initAudio();
+  state = 'lobby'; only('mp');
+  $('mpName').value = localStorage.getItem('gulpcity_name') || '';
+  mpShow('name');
+  if (!isTouch) $('mpName').focus();
+}
+function searching(msg = 'Looking for other players…') {
+  mpShow('search');
+  setStatus(`<span class="spin">🌀</span> ${msg}`);
+  clearTimeout(net.seekTimer);
+  const g = net.gen;
+  // nobody else around? then you become the host and others get asked to join you
+  net.seekTimer = setTimeout(() => { if (g === net.gen && !net.room && !net.prompt) becomeHost(); }, 8000);
+  considerAds();
+}
+async function mpFind() {
+  const name = ($('mpName').value.trim() || 'Player').slice(0, 14);
+  localStorage.setItem('gulpcity_name', name); net.name = name;
+  mpShow('search'); setStatus('<span class="spin">🌀</span> Connecting…');
+  const g = ++net.gen;
+  try { net.lib = net.lib || await import(TRYSTERO_URL); }
+  catch (e) { if (g === net.gen) setStatus('❌ Couldn\'t load multiplayer. Check your internet and try again.'); return; }
+  if (g !== net.gen) return;
+  const lobby = net.lib.joinRoom(NET_CFG, 'lobby-v1');
+  net.lobby = lobby;
+  net.LA.ad = lobby.makeAction('ad');
+  net.LA.ad.onMessage((d, { peerId }) => {
+    if (!d || typeof d.code !== 'string') return;
+    if (d.open) net.ads.set(peerId, { ...d, peerId, seen: performance.now() }); else net.ads.delete(peerId);
+    considerAds();
+  });
+  lobby.onPeerJoin(({ peerId }) => sendAd(peerId));
+  lobby.onPeerLeave(({ peerId }) => { net.ads.delete(peerId); if (net.prompt && net.prompt.peerId === peerId) { closeAsk(); considerAds(); } });
+  net.adTimer = setInterval(() => {
+    sendAd();
+    const now = performance.now();
+    for (const [k, a] of net.ads) if (now - a.seen > 8000) net.ads.delete(k);
+  }, 2000);
+  searching();
+}
+function sendAd(target) {
+  if (!net.isHost || !net.LA.ad) return;
+  net.LA.ad.send({ code: net.myCode, name: net.name, n: net.roster.length, t: net.createdAt,
+    open: !net.started && state === 'lobby' && net.roster.length < MAXP }, target ? { target } : undefined).catch(() => {});
+}
+function considerAds() {
+  if (state !== 'lobby' || net.prompt || !net.lobby) return;
+  if (net.room && !net.isHost) return;                    // already in someone's game
+  if (net.isHost && net.roster.length > 1) return;        // players already joined mine
+  const now = performance.now();
+  let best = null;
+  for (const a of net.ads.values()) {
+    if (!a.open || a.n >= MAXP || net.declined.has(a.code) || a.code === net.myCode || now - a.seen > 8000) continue;
+    if (net.isHost && !(a.t < net.createdAt)) continue;   // two empty lobbies: only the newer one is asked to merge
+    if (!best || a.t < best.t) best = a;
+  }
+  if (best) askJoin(best);
+}
+function askJoin(a) {
+  net.prompt = a;
+  $('askText').textContent = `Join ${a.name}'s game?`;
+  $('askSub').textContent = `${a.n} / ${MAXP} players in the lobby`;
+  $('ask').classList.remove('hidden');
+  sfx.power();
+}
+function closeAsk() { net.prompt = null; $('ask').classList.add('hidden'); }
+$('askYes').addEventListener('click', () => {
+  const a = net.prompt; if (!a) return;
+  closeAsk(); clearTimeout(net.seekTimer);
+  joinGameRoom(a.code, false, a.name);
+});
+$('askNo').addEventListener('click', () => {
+  const a = net.prompt; if (!a) return;
+  net.declined.add(a.code); closeAsk();
+  if (!net.room) becomeHost(); else considerAds();
+});
+function becomeHost() {
+  clearTimeout(net.seekTimer);
+  net.myCode = Math.random().toString(36).slice(2, 10);
+  net.createdAt = Date.now();
+  joinGameRoom(net.myCode, true, net.name);
+}
+async function joinGameRoom(code, host, hostName) {
+  leaveGameRoom();
+  const g = net.gen;
+  net.isHost = host; net.gameCode = code; net.hostName = hostName; net.started = false;
+  if (!host) net.myCode = null;
+  const room = net.lib.joinRoom({ ...NET_CFG, maxUsers: MAXP }, 'g-' + code);
+  net.room = room; net.roster = []; net.hostPeer = null;
+  mpShow('lobby'); $('mpPlayers').innerHTML = '';
+  setStatus('<span class="spin">🌀</span> Connecting…');
+  let self;
+  try { self = await room.getSelf(); } catch (e) { if (g === net.gen) searching('Couldn\'t connect — still looking…'); return; }
+  if (g !== net.gen || net.room !== room) return;
+  net.myId = self.peerId;
+  for (const n of ['hi', 'roster', 'full', 'start', 'st', 'gulp', 'pu', 'pick', 'end']) net.A[n] = room.makeAction(n);
+  net.A.hi.onMessage((d, { peerId }) => onHi(d, peerId));
+  net.A.roster.onMessage((d, { peerId }) => { if (peerId === net.hostPeer && Array.isArray(d)) { net.roster = d; renderLobby(); } });
+  net.A.full.onMessage((d, { peerId }) => { if (peerId === net.hostPeer && state === 'lobby') kicked(code, 'That game is full — still looking…'); });
+  net.A.start.onMessage((d, { peerId }) => { if (peerId === net.hostPeer && state === 'lobby') beginMP(d); });
+  net.A.st.onMessage(onState);
+  net.A.gulp.onMessage(onGulp);
+  net.A.pu.onMessage(d => { if (net.inGame && !powerups.some(p => p.id === d.id)) spawnPU(d.type, d.x, d.z, d.id); });
+  net.A.pick.onMessage(onPick);
+  net.A.end.onMessage(() => { if (net.inGame && state === 'play') endGame('eaten'); });
+  room.onPeerJoin(({ peerId }) => net.A.hi.send({ name: net.name, host: net.isHost }, { target: peerId }).catch(() => {}));
+  room.onPeerLeave(({ peerId }) => onLeave(peerId));
+  room.onError(e => { if (e.code === 'room-full' && state === 'lobby' && !net.isHost) kicked(code, 'That game is full — still looking…'); });
+  if (host) { net.hostPeer = net.myId; net.roster = [{ id: net.myId, name: net.name }]; sendAd(); }
+  renderLobby();
+}
+function kicked(code, msg) {
+  net.declined.add(code);
+  leaveGameRoom();
+  searching(msg);
+}
+function onHi(d, peerId) {
+  if (!d || typeof d.name !== 'string') return;
+  if (d.host) net.hostPeer = peerId;
+  if (!net.isHost) { renderLobby(); return; }
+  if (state !== 'lobby' || net.started) { netSend('full', {}, peerId); return; }
+  if (net.roster.some(p => p.id === peerId)) return;
+  if (net.roster.length >= MAXP) { netSend('full', {}, peerId); return; }
+  net.roster.push({ id: peerId, name: d.name.slice(0, 14) || 'Player' });
+  netSend('roster', net.roster);
+  renderLobby(); sendAd(); sfx.pop(.5);
+}
+function onLeave(peerId) {
+  if (net.inGame) {
+    const h = holeByPid(peerId);
+    if (h && state === 'play') { banner(`${h.name} left the game`, '#c3a6ff', 1.6); removeHole(h); }
+    return;
+  }
+  if (state !== 'lobby') return;
+  if (net.isHost) {
+    const n = net.roster.length;
+    net.roster = net.roster.filter(p => p.id !== peerId);
+    if (net.roster.length !== n) { netSend('roster', net.roster); renderLobby(); sendAd(); }
+  } else if (peerId === net.hostPeer) {
+    kicked(net.gameCode, 'The host left — looking for another game…');
+  }
+}
+function renderLobby() {
+  if (state !== 'lobby' || !net.room) return;
+  $('mpTitle').textContent = `${net.isHost ? 'YOUR' : net.hostName.toUpperCase() + "'S"} GAME · ${net.roster.length}/${MAXP}`;
+  $('mpPlayers').innerHTML = net.roster.map((p, i) =>
+    `<div><span class="dot" style="background:#${new THREE.Color(MP_COLORS[i % MP_COLORS.length]).getHexString()}"></span>` +
+    `${i === 0 ? '👑 ' : ''}${p.name.replace(/[<>&]/g, '')}${p.id === net.myId ? ' (you)' : ''}</div>`).join('');
+  const inRoster = net.roster.some(p => p.id === net.myId);
+  setStatus(net.isHost
+    ? (net.roster.length > 1 ? 'Press START when everyone is in!' : '<span class="spin">🌀</span> Waiting for players to join… (you can start alone too)')
+    : inRoster ? `Waiting for ${net.hostName} to press START…` : '<span class="spin">🌀</span> Joining…');
+}
+$('mpStart').addEventListener('click', () => {
+  if (!net.isHost || state !== 'lobby' || !net.room) return;
+  const d = { seed: Math.floor(Math.random() * 2 ** 31), roster: net.roster };
+  net.started = true; sendAd();
+  netSend('start', d);
+  beginMP(d);
+});
+function beginMP(d) {
+  if (!d || !Array.isArray(d.roster) || !d.roster.some(p => p.id === net.myId)) return;
+  closeAsk(); clearTimeout(net.seekTimer); leaveLobby();
+  net.inGame = true; net.eaten = []; net.stT = 0;
+  startGame({ mp: true, seed: d.seed >>> 0, roster: d.roster.slice(0, MAXP) });
+}
+// ---- in-game messages ----
+function netTick(dt) {
+  net.stT -= dt;
+  if (net.stT <= 0) { net.stT = .08; netState(); }
+}
+const r2 = v => Math.round(v * 100) / 100;
+function netState() {
+  const p = player;
+  const f = (p.frozenT > 0 ? 1 : 0) | (p.speedT > 0 ? 2 : 0) | (p.magnetT > 0 ? 4 : 0) | (p.shield > 0 ? 8 : 0);
+  netSend('st', { p: [r2(p.x), r2(p.z), r2(p.vx), r2(p.vz), r2(p.R), p.growth, p.level, p.score], f, lv: p.lv, a: p.alive ? 1 : 0, e: net.eaten.splice(0) });
+}
+function onState(d, { peerId }) {
+  const h = holeByPid(peerId);
+  if (!h || !d || !Array.isArray(d.p) || d.lv < h.lv) return;
+  const [x, z, vx, vz, R, growth, level, score] = d.p;
+  h.nx = x; h.nz = z; h.nvx = vx; h.nvz = vz; h.nR = R; h.growth = growth; h.level = level; h.score = score; h.lv = d.lv;
+  h.netT = performance.now();
+  h.frozenT = d.f & 1 ? .3 : 0; h.speedT = d.f & 2 ? .3 : 0; h.magnetT = d.f & 4 ? .3 : 0; h.shield = d.f & 8 ? .3 : 0;
+  if (d.a && !h.alive && !h.dying) {     // back from a gulp
+    h.alive = true; h.x = x; h.z = z; h.R = R; h.grp.visible = true; ringFX(x, z, 1, h.baseColor);
+  } else if (!d.a && h.alive) { h.alive = false; h.grp.visible = false; }
+  if (Array.isArray(d.e)) for (const id of d.e) {
+    const o = objById.get(id);
+    if (!o || o.state !== 'idle') continue;
+    if (h.alive && Math.hypot(o.x - h.x, o.z - h.z) < h.R * 1.6 + 3) startFall(o, h);
+    else { burst(o.x, .5, o.z, o.color, 8, 3, .3); removeObj(o); }
+  }
+}
+function netGulpedBy(a) {
+  const pts = eatHole(a, player);
+  player.lv++;
+  netSend('gulp', { by: a.pid, pts, lv: player.lv });
+  netState();
+}
+function onGulp(d, { peerId }) {
+  const v = holeByPid(peerId); if (!v || !d) return;
+  v.lv = Math.max(v.lv, d.lv | 0);
+  const e = d.by === net.myId ? player : holeByPid(d.by);
+  if (v.alive && e) eatHole(e, v, d.pts | 0);
+  else {
+    v.alive = false; v.grp.visible = false;
+    if (e === player) { addPoints(player, d.pts | 0); banner(`You gulped ${v.name}!`, v.css, 1.8); sfx.holeEat(); stats.gulped++; }
+  }
+}
+function onPick(d, { peerId }) {
+  if (!d) return;
+  const p = powerups.find(q => q.id === d.id);
+  if (p && !p.dead) { p.dead = true; burst(p.x, 1.2, p.z, PU[p.type].color, 30, 6, .45); }
+  const h = holeByPid(peerId);
+  if (d.type === 'freeze' && player.alive && state === 'play') {
+    player.frozenT = 3; banner(`❄️ FROZEN by ${h ? h.name : 'someone'}!`, '#9feaff', 1.5); sfx.freeze();
+  }
+}
+function leaveGameRoom() {
+  const r = net.room; net.room = null; net.A = {};
+  if (r) r.leave().catch(() => {});
+  net.isHost = false; net.roster = []; net.hostPeer = null; net.inGame = false; net.started = false;
+}
+function leaveLobby() {
+  clearInterval(net.adTimer);
+  const l = net.lobby; net.lobby = null; net.LA = {};
+  if (l) l.leave().catch(() => {});
+  net.ads.clear();
+}
+function netLeaveAll() {
+  net.gen++;
+  clearTimeout(net.seekTimer); closeAsk();
+  leaveGameRoom(); leaveLobby();
+  net.declined.clear(); net.myCode = null; net.myId = null;
+}
+$('mpBtn').addEventListener('click', openMP);
+$('mpGo').addEventListener('click', mpFind);
+$('mpBack').addEventListener('click', toMenu);
+addEventListener('pagehide', () => netLeaveAll());
 
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
@@ -1601,26 +2082,19 @@ addEventListener('resize', () => {
 pMat.uniforms.uScale.value = innerHeight / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2))) * .9;
 
 /* ---------------- main loop ---------------- */
-genCity(); resetHoles(); showBest();
+setHoles(SP_HOLES); genCity(); resetHoles(SP_STARTS); showBest();
 const clock = new THREE.Clock();
 let sparkT = 0;
-function frame() {
-  requestAnimationFrame(frame);
-  const dt = Math.min(clock.getDelta(), .05), time = clock.elapsedTime;
+function step(dt, time) {
   const sim = state !== 'over';
-  if (state === 'play') {
-    timeLeft -= dt;
-    const t = Math.ceil(timeLeft);
-    if (t <= 10 && t !== lastTick && t > 0) { lastTick = t; sfx.tick(); }
-    if (timeLeft <= 0) { timeLeft = 0; endGame(); }
-  }
-  setDay(state === 'menu' ? .55 + .35 * Math.sin(time * .08) : ((ROUND_TIME - timeLeft) / 300) % 1, dt);  // two days per round
+  clk += dt;
+  if (state === 'play') gameT += dt;
+  setDay(state === 'menu' || state === 'lobby' ? .55 + .35 * Math.sin(time * .08) : (gameT / 300) % 1, dt);  // a day every 5 minutes
   if (sim) {
     updateHoles(dt, time);
     updateObjects(dt, time);
     holeVsHole();
     updatePU(dt, time);
-    updateCity(dt);
     sparkT -= dt;
     if (sparkT <= 0) {
       sparkT = .05;
@@ -1630,6 +2104,28 @@ function frame() {
       }
     }
   }
+  if (state === 'play') {
+    if (net.inGame) netTick(dt);
+    if (!frenzy && objects.length <= Math.max(25, totalObjs * .03)) {
+      frenzy = true; banner('🔥 FINAL FRENZY! Everything is edible!', '#ff8bd1', 2.6); sfx.levelUp();
+    }
+    if (objects.length === 0) { if (net.inGame) netSend('end', {}); endGame('eaten'); }
+  }
+  // tiny props far from the action aren't worth drawing once you're huge
+  lodT -= dt;
+  if (lodT <= 0) {
+    lodT = .4;
+    const far = camH > 45, R2 = (camH * .9) ** 2;
+    for (const o of objects) if (o.tiny && o.state === 'idle') {
+      const dx = o.x - camLook.x, dz = o.z - camLook.z;
+      o.grp.visible = !far || dx * dx + dz * dz < R2;
+    }
+  }
+}
+function frame() {
+  requestAnimationFrame(frame);
+  const dt = Math.min(clock.getDelta(), .05), time = clock.elapsedTime;
+  step(dt, time);
   syncHoles(time);
   updateParticles(dt);
   updateRings(dt);
@@ -1637,7 +2133,9 @@ function frame() {
   updatePops(dt);
   updateTags();
   hudT -= dt;
-  if (state === 'play' && hudT <= 0) { hudT = .1; updHUD(); }
+  if (state === 'play' && hudT <= 0) { hudT = .15; updHUD(); }
+  miniT -= dt;
+  if (state === 'play' && miniT <= 0) { miniT = .2; drawMini(time); }
   renderer.render(scene, camera);
 }
 frame();
