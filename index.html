@@ -216,7 +216,8 @@ const HALF = NB * 15 + 4;   // playable half-size (169)
 const CITY = NB * 15 + 5;   // textured ground half-size (170)
 const WRAP = CITY + 4;      // traffic wraps around at this distance
 const HOLE_DEPTH = 90;
-const HMAX = 20;            // max holes (multiplayer cap)
+const HMAX = 20;
+const RESPAWN_SAFE = 10;     // seconds of no-gulp shield + double speed after respawning            // max holes (multiplayer cap)
 const BLOCKS = Array.from({ length: NB }, (_, i) => (i - (NB - 1) / 2) * 30);
 const ROADS = Array.from({ length: NB + 1 }, (_, i) => (i - NB / 2) * 30);
 const QUADS = [[-1, -1], [1, -1], [-1, 1], [1, 1]];
@@ -1011,7 +1012,7 @@ function resetHoles(starts) {
   holes.forEach((h, i) => {
     h.x = h.nx = starts[i][0]; h.z = h.nz = starts[i][1]; h.vx = h.vz = h.nvx = h.nvz = 0;
     h.level = 0; h.growth = 0; h.keep = 0; h.score = 0; h.R = h.nR = LEVELS[0].R; h.lv = 0;
-    h.alive = true; h.dying = false; h.frozenT = h.speedT = h.magnetT = 0; h.shield = 0;
+    h.alive = true; h.dying = false; h.frozenT = h.speedT = h.magnetT = 0; h.shield = 0; h.boostT = 0;
     h.aiT = 0; h.stuckT = 0; h.grp.visible = true;
   });
 }
@@ -1042,9 +1043,10 @@ function respawnHole(h) {
   h.growth = h.keep || 0; h.keep = 0; h.level = 0;
   while (h.level < LEVELS.length - 1 && h.growth >= LEVELS[h.level + 1].need) h.level++;
   h.R = targetRadius(h);   // comes back with some of its size
-  h.alive = true; h.dying = false; h.shield = 2.5; h.grp.visible = true; h.aiT = 0;
+  // comeback: 10 s where nobody can gulp you, at double speed
+  h.alive = true; h.dying = false; h.shield = RESPAWN_SAFE; h.boostT = RESPAWN_SAFE; h.grp.visible = true; h.aiT = 0;
   ringFX(h.x, h.z, 1, h.baseColor);
-  if (h.isPlayer && state === 'play') banner('BACK IN THE GAME!', '#c3a6ff', 1.4);
+  if (h.isPlayer && state === 'play') banner('BACK! 🛡️ SAFE + ⚡ 2× SPEED FOR 10s', '#c3a6ff', 2.2);
 }
 // a swallows b. Returns the points it was worth. In multiplayer the victim decides (it's the one that knows where it really is).
 function eatHole(a, b, pts) {
@@ -1053,7 +1055,7 @@ function eatHole(a, b, pts) {
   for (const o of objects) if (o.state === 'fall' && o.owner === b) removeObj(o);
   addPoints(a, pts);
   if (!b.remote) { b.keep = Math.floor(b.growth * .4); b.growth = 0; b.level = 0; }
-  b.speedT = b.magnetT = b.frozenT = 0;
+  b.speedT = b.magnetT = b.frozenT = 0; b.boostT = 0;
   burst(b.x, .4, b.z, b.baseColor.getHex(), 45, 8, .6);
   if (a.isPlayer && state === 'play') {
     popup(b.x, 1, b.z, `+${pts} GULP!`, 'big');
@@ -1552,12 +1554,13 @@ function updateHoles(dt, time) {
     let [mx, mz] = (h.isPlayer && state === 'play') ? inputDir() : aiDir(h, dt);
     if (h.frozenT > 0) { h.frozenT -= dt; mx = mz = 0; if (Math.random() < .3) emit(h.x + rand(-h.R, h.R), 1.5, h.z + rand(-h.R, h.R), 0, -1, 0, 0xffffff, .25, 1, 1); }
     h.speedT = Math.max(0, h.speedT - dt); h.magnetT = Math.max(0, h.magnetT - dt); h.shield = Math.max(0, h.shield - dt);
-    const sp = (5.7 + h.R * 1.02) * (h.speedT > 0 ? 1.6 : 1) * (h.isPlayer && state === 'play' ? 1 : h.spd);
+    h.boostT = Math.max(0, (h.boostT || 0) - dt);
+    const sp = (5.7 + h.R * 1.02) * (h.speedT > 0 ? 1.6 : 1) * (h.boostT > 0 ? 2 : 1) * (h.isPlayer && state === 'play' ? 1 : h.spd);
     const k2 = 1 - Math.exp(-dt * 16);   // snappy steering
     h.vx += (mx * sp - h.vx) * k2; h.vz += (mz * sp - h.vz) * k2;
     h.x = clamp(h.x + h.vx * dt, -HALF, HALF); h.z = clamp(h.z + h.vz * dt, -HALF, HALF);
     h.R += (targetRadius(h) - h.R) * (1 - Math.exp(-dt * 3));
-    if (h.speedT > 0 && Math.hypot(h.vx, h.vz) > 1) {
+    if ((h.speedT > 0 || h.boostT > 0) && Math.hypot(h.vx, h.vz) > 1) {
       const a = Math.random() * Math.PI * 2;
       emit(h.x + Math.cos(a) * h.R, .2, h.z + Math.sin(a) * h.R, -h.vx * .2, 1.5, -h.vz * .2, 0xffd400, .35 + h.R * .05, .4, 2);
     }
@@ -1688,6 +1691,7 @@ function updHUD() {
   let chips = '';
   if (P.magnetT > 0) chips += `<div class="chip" style="--c:#ff4d4d">🧲 ${P.magnetT.toFixed(1)}</div>`;
   if (P.speedT > 0) chips += `<div class="chip" style="--c:#f5b800">⚡ ${P.speedT.toFixed(1)}</div>`;
+  if (P.boostT > 0) chips += `<div class="chip" style="--c:#8a5cff">🛡️ SAFE + 2× SPEED ${P.boostT.toFixed(1)}</div>`;
   if (P.frozenT > 0) chips += `<div class="chip" style="--c:#38bfe0">❄️ FROZEN ${P.frozenT.toFixed(1)}</div>`;
   $('chips').innerHTML = chips;
 }
@@ -2007,7 +2011,7 @@ function netTick(dt) {
 const r2 = v => Math.round(v * 100) / 100;
 function netState() {
   const p = player;
-  const f = (p.frozenT > 0 ? 1 : 0) | (p.speedT > 0 ? 2 : 0) | (p.magnetT > 0 ? 4 : 0) | (p.shield > 0 ? 8 : 0);
+  const f = (p.frozenT > 0 ? 1 : 0) | (p.speedT > 0 || p.boostT > 0 ? 2 : 0) | (p.magnetT > 0 ? 4 : 0) | (p.shield > 0 ? 8 : 0);
   netSend('st', { p: [r2(p.x), r2(p.z), r2(p.vx), r2(p.vz), r2(p.R), p.growth, p.level, p.score], f, lv: p.lv, a: p.alive ? 1 : 0, e: net.eaten.splice(0) });
 }
 function onState(d, { peerId }) {
