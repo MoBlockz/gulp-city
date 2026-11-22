@@ -1003,6 +1003,8 @@ function removeHole(h) {
   for (const o of objects) if (o.state === 'fall' && o.owner === h) removeObj(o);
 }
 
+// the bigger you get, the slower you go (6.4 at the start, about 4 at BLACK HOLE)
+const holeSpeed = R => 6.4 * Math.pow(Math.max(R, LEVELS[0].R) / LEVELS[0].R, -.15);
 function targetRadius(h) {
   const L = LEVELS[h.level], N = LEVELS[h.level + 1];
   if (!N) return L.R;
@@ -1243,7 +1245,7 @@ function updateTags() {
     const crown = leader === h && h.score > 0 ? '👑 ' : '';
     const fr = h.frozenT > 0 ? ' ❄️' : '';
     // 🍽️ = you're big enough to gulp them, ⚠️ = they can gulp you
-    const tip = h.isPlayer || state !== 'play' ? '' : canEatHole(player, h) ? ' 🍽️' : canEatHole(h, player) ? ' ⚠️' : '';
+    const tip = h.isPlayer || net.spec || state !== 'play' ? '' : canEatHole(player, h) ? ' 🍽️' : canEatHole(h, player) ? ' ⚠️' : '';
     const txt = crown + h.name + fr + tip;
     if (h.tag.textContent !== txt) h.tag.textContent = txt;
     h.tag.style.transform = `translate(${(_p.x * .5 + .5) * innerWidth}px,${(-_p.y * .5 + .5) * innerHeight}px) translate(-50%,-100%)`;
@@ -1313,6 +1315,7 @@ addEventListener('keydown', e => {
   if (e.target && e.target.tagName === 'INPUT') { if (e.code === 'Enter') $('mpGo').click(); return; }
   keys[e.code] = true;
   if (e.code === 'KeyM') toggleMute();
+  if (net.spec && state === 'play' && ['ArrowRight', 'ArrowLeft', 'KeyD', 'KeyA', 'Space'].includes(e.code)) followNext(e.code === 'ArrowLeft' || e.code === 'KeyA' ? -1 : 1);
   if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
   if ((e.code === 'Enter' || e.code === 'Space') && !overLock && (state === 'menu' || (state === 'over' && mode === 'sp'))) startGame();
 });
@@ -1321,6 +1324,7 @@ addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
 const touch = { active: false, id: null, sx: 0, sy: 0, x: 0, y: 0 };
 canvas.addEventListener('pointerdown', e => {
   if (state !== 'play') return;
+  if (net.spec) { followNext(); return; }
   touch.active = true; touch.id = e.pointerId; touch.sx = touch.x = e.clientX; touch.sy = touch.y = e.clientY;
   $('joy').classList.remove('hidden'); updJoy();
 });
@@ -1555,7 +1559,7 @@ function updateHoles(dt, time) {
     if (h.frozenT > 0) { h.frozenT -= dt; mx = mz = 0; if (Math.random() < .3) emit(h.x + rand(-h.R, h.R), 1.5, h.z + rand(-h.R, h.R), 0, -1, 0, 0xffffff, .25, 1, 1); }
     h.speedT = Math.max(0, h.speedT - dt); h.magnetT = Math.max(0, h.magnetT - dt); h.shield = Math.max(0, h.shield - dt);
     h.boostT = Math.max(0, (h.boostT || 0) - dt);
-    const sp = (5.7 + h.R * 1.02) * (h.speedT > 0 ? 1.6 : 1) * (h.boostT > 0 ? 2 : 1) * (h.isPlayer && state === 'play' ? 1 : h.spd);
+    const sp = holeSpeed(h.R) * (frenzy ? 1.5 : 1) * (h.speedT > 0 ? 1.6 : 1) * (h.boostT > 0 ? 2 : 1) * (h.isPlayer && state === 'play' ? 1 : h.spd);
     const k2 = 1 - Math.exp(-dt * 16);   // snappy steering
     h.vx += (mx * sp - h.vx) * k2; h.vz += (mz * sp - h.vz) * k2;
     h.x = clamp(h.x + h.vx * dt, -HALF, HALF); h.z = clamp(h.z + h.vz * dt, -HALF, HALF);
@@ -1675,9 +1679,9 @@ function canEatHole(a, b) { return a.R > b.R * 1.1 || (a.level > b.level && a.R 
 function updHUD() {
   const P = player, L = LEVELS[P.level], N = LEVELS[P.level + 1];
   $('score').textContent = P.score.toLocaleString();
-  $('sizeName').textContent = `SIZE ${P.level + 1} · ${L.name}`;
+  $('sizeName').textContent = (net.spec ? `👀 ${P.name} · ` : '') + `SIZE ${P.level + 1} · ${L.name}`;
   $('sizeBar').style.width = (N ? clamp((P.growth - L.need) / (N.need - L.need), 0, 1) * 100 : 100) + '%';
-  $('canEat').textContent = frenzy ? '🔥 FINAL FRENZY: eat anything!' : 'Can now eat: ' + L.eats;
+  $('canEat').textContent = net.spec ? 'Spectating · tap or ← → to switch player' : frenzy ? '🔥 FINAL FRENZY: eat anything!' : 'Can now eat: ' + L.eats;
   const pct = Math.floor((1 - objects.length / totalObjs) * 100);
   $('timer').innerHTML = `${dayIcon} ${fmtT(gameT)}<small>${pct}% OF THE CITY GULPED · ${objects.length.toLocaleString()} LEFT</small>`;
   const sorted = [...holes].sort((a, b) => b.score - a.score);
@@ -1771,7 +1775,7 @@ function startGame(opts = {}) {
   stats.biggest = null; stats.eaten = 0; stats.gulped = 0;
   camBase.set(player.x, 30, player.z + 30); camLook.set(player.x, 0, player.z);
   state = 'play';
-  only('hud', 'quit');
+  only('hud', 'quit'); $('quit').textContent = '🏁 END';
   updHUD(); drawMini(0);
   banner(mode === 'mp' ? `GULP! ${holes.length} players` : 'GULP!', '#ffe66d', 1.3); sfx.start();
 }
@@ -1780,16 +1784,19 @@ function endGame(reason) {
   state = 'over'; overLock = true;
   touch.active = false; $('joy').classList.add('hidden');
   sfx.end();
+  if (reason === 'eaten') lastGame = null;   // finished games can't be spectated
   const sorted = [...holes].sort((a, b) => b.score - a.score);
+  const watching = !!net.spec, winner = sorted[0];
+  const me = watching ? winner : player;
   const rank = sorted.indexOf(player) + 1;
-  const best = Math.max(getBest(), player.score); localStorage.setItem(bestKey, best);
+  const best = watching ? getBest() : Math.max(getBest(), player.score); localStorage.setItem(bestKey, best);
   $('overTitle').textContent = reason === 'eaten' ? 'CITY GULPED!' : 'GAME OVER';
-  const winner = sorted[0];
-  $('rankText').textContent = rank === 1 ? '🏆 #1 — TOP GULPER OF THE CITY!'
-    : `You finished #${rank} of ${holes.length} · ${winner.name} won`;
-  $('rScore').textContent = player.score.toLocaleString();
-  $('rSize').textContent = `${player.level + 1} · ${LEVELS[player.level].name}`;
-  $('rEaten').textContent = stats.eaten.toLocaleString();
+  $('rankText').textContent = !winner ? 'Everyone left the game'
+    : watching ? `🏆 ${winner.name} won!`
+    : rank === 1 ? '🏆 #1 — TOP GULPER OF THE CITY!' : `You finished #${rank} of ${holes.length} · ${winner.name} won`;
+  $('rScore').textContent = me ? me.score.toLocaleString() : '—';
+  $('rSize').textContent = me ? `${me.level + 1} · ${LEVELS[me.level].name}` : '—';
+  $('rEaten').textContent = watching ? '—' : stats.eaten.toLocaleString();
   $('rRivals').textContent = stats.gulped;
   $('rBig').textContent = stats.biggest ? stats.biggest.label : '—';
   $('rBest').textContent = best.toLocaleString();
@@ -1805,7 +1812,10 @@ function toMenu() {
 $('playBtn').addEventListener('click', () => startGame());
 $('againBtn').addEventListener('click', () => startGame());
 $('menuBtn').addEventListener('click', toMenu);
-$('quit').addEventListener('click', e => { e.stopPropagation(); if (state === 'play') endGame('quit'); });
+$('quit').addEventListener('click', e => {
+  e.stopPropagation();
+  if (net.spec) toMenu(); else if (state === 'play') endGame('quit');
+});
 
 /* ---------------- multiplayer ----------------
    Peer-to-peer over WebRTC using Trystero (public relays only help players find each other; game data goes browser to browser).
@@ -1817,7 +1827,8 @@ const NET_CFG = { appId: 'ty-robb.github.io/gulp-city', identity: 'none' };
 const MAXP = 20;
 const net = { lib: null, lobby: null, room: null, myId: null, inGame: false, isHost: false, started: false, myCode: null, gameCode: null,
   name: 'Player', hostName: '', ads: new Map(), declined: new Set(), roster: [], hostPeer: null, prompt: null,
-  adTimer: 0, seekTimer: 0, A: {}, LA: {}, stT: 0, eaten: [], createdAt: 0, gen: 0 };
+  adTimer: 0, seekTimer: 0, A: {}, LA: {}, stT: 0, eaten: [], createdAt: 0, gen: 0, seed: 0, spec: null, snap: null };
+let lastGame = null;   // the multiplayer game you quit early: you can come back and spectate it
 const holeByPid = pid => holes.find(h => h.pid === pid);
 function netSend(name, data, target) {
   const a = net.A[name];
@@ -1825,6 +1836,7 @@ function netSend(name, data, target) {
 }
 function isPuAuthority() {
   if (!net.inGame) return true;
+  if (net.spec) return false;
   let min = net.myId; for (const h of holes) if (h.remote && h.pid < min) min = h.pid;
   return min === net.myId;
 }
@@ -1876,6 +1888,7 @@ async function mpFind() {
     for (const [k, a] of net.ads) if (now - a.seen > 8000) net.ads.delete(k);
   }, 2000);
   searching();
+  if (lastGame) trySpectate(lastGame);
 }
 function sendAd(target) {
   if (!net.isHost || !net.LA.ad) return;
@@ -1906,10 +1919,11 @@ function closeAsk() { net.prompt = null; $('ask').classList.add('hidden'); }
 $('askYes').addEventListener('click', () => {
   const a = net.prompt; if (!a) return;
   closeAsk(); clearTimeout(net.seekTimer);
-  joinGameRoom(a.code, false, a.name);
+  if (a.spectate) beginSpectate(a.snap); else joinGameRoom(a.code, false, a.name);
 });
 $('askNo').addEventListener('click', () => {
   const a = net.prompt; if (!a) return;
+  if (a.spectate) { closeAsk(); lastGame = null; leaveGameRoom(); searching(); return; }
   net.declined.add(a.code); closeAsk();
   if (!net.room) becomeHost(); else considerAds();
 });
@@ -1932,8 +1946,14 @@ async function joinGameRoom(code, host, hostName) {
   try { self = await room.getSelf(); } catch (e) { if (g === net.gen) searching('Couldn\'t connect — still looking…'); return; }
   if (g !== net.gen || net.room !== room) return;
   net.myId = self.peerId;
-  for (const n of ['hi', 'roster', 'full', 'start', 'st', 'gulp', 'pu', 'pick', 'end']) net.A[n] = room.makeAction(n);
+  wireRoom(room, code);
+  if (host) { net.hostPeer = net.myId; net.roster = [{ id: net.myId, name: net.name }]; sendAd(); }
+  renderLobby();
+}
+function wireRoom(room, code) {
+  for (const n of ['hi', 'roster', 'full', 'start', 'st', 'gulp', 'pu', 'pick', 'end', 'snap']) net.A[n] = room.makeAction(n);
   net.A.hi.onMessage((d, { peerId }) => onHi(d, peerId));
+  net.A.snap.onMessage(d => onSnap(d));
   net.A.roster.onMessage((d, { peerId }) => { if (peerId === net.hostPeer && Array.isArray(d)) { net.roster = d; renderLobby(); } });
   net.A.full.onMessage((d, { peerId }) => { if (peerId === net.hostPeer && state === 'lobby') kicked(code, 'That game is full — still looking…'); });
   net.A.start.onMessage((d, { peerId }) => { if (peerId === net.hostPeer && state === 'lobby') beginMP(d); });
@@ -1942,11 +1962,9 @@ async function joinGameRoom(code, host, hostName) {
   net.A.pu.onMessage(d => { if (net.inGame && !powerups.some(p => p.id === d.id)) spawnPU(d.type, d.x, d.z, d.id); });
   net.A.pick.onMessage(onPick);
   net.A.end.onMessage(() => { if (net.inGame && state === 'play') endGame('eaten'); });
-  room.onPeerJoin(({ peerId }) => net.A.hi.send({ name: net.name, host: net.isHost }, { target: peerId }).catch(() => {}));
+  room.onPeerJoin(({ peerId }) => net.A.hi && net.A.hi.send({ name: net.name, host: net.isHost, spec: !!net.spec }, { target: peerId }).catch(() => {}));
   room.onPeerLeave(({ peerId }) => onLeave(peerId));
-  room.onError(e => { if (e.code === 'room-full' && state === 'lobby' && !net.isHost) kicked(code, 'That game is full — still looking…'); });
-  if (host) { net.hostPeer = net.myId; net.roster = [{ id: net.myId, name: net.name }]; sendAd(); }
-  renderLobby();
+  room.onError(e => { if (e.code === 'room-full' && state === 'lobby' && !net.isHost && !net.spec) kicked(code, 'That game is full — still looking…'); });
 }
 function kicked(code, msg) {
   net.declined.add(code);
@@ -1955,6 +1973,11 @@ function kicked(code, msg) {
 }
 function onHi(d, peerId) {
   if (!d || typeof d.name !== 'string') return;
+  if (d.spec) {   // someone wants to watch: one player (the authority) sends them the current game
+    if (net.inGame && !net.spec && isPuAuthority()) netSend('snap', makeSnap(), peerId);
+    return;
+  }
+  if (net.spec) return;
   if (d.host) net.hostPeer = peerId;
   if (!net.isHost) { renderLobby(); return; }
   if (state !== 'lobby' || net.started) { netSend('full', {}, peerId); return; }
@@ -1967,7 +1990,10 @@ function onHi(d, peerId) {
 function onLeave(peerId) {
   if (net.inGame) {
     const h = holeByPid(peerId);
-    if (h && state === 'play') { banner(`${h.name} left the game`, '#c3a6ff', 1.6); removeHole(h); }
+    if (h && state === 'play') {
+      banner(`${h.name} left the game`, '#c3a6ff', 1.6); removeHole(h);
+      if (net.spec && h === player) { if (holes.length) followNext(); else endGame('quit'); }
+    }
     return;
   }
   if (state !== 'lobby') return;
@@ -1980,7 +2006,7 @@ function onLeave(peerId) {
   }
 }
 function renderLobby() {
-  if (state !== 'lobby' || !net.room) return;
+  if (state !== 'lobby' || !net.room || net.spec) return;
   $('mpTitle').textContent = `${net.isHost ? 'YOUR' : net.hostName.toUpperCase() + "'S"} GAME · ${net.roster.length}/${MAXP}`;
   $('mpPlayers').innerHTML = net.roster.map((p, i) =>
     `<div><span class="dot" style="background:#${new THREE.Color(MP_COLORS[i % MP_COLORS.length]).getHexString()}"></span>` +
@@ -2000,7 +2026,8 @@ $('mpStart').addEventListener('click', () => {
 function beginMP(d) {
   if (!d || !Array.isArray(d.roster) || !d.roster.some(p => p.id === net.myId)) return;
   closeAsk(); clearTimeout(net.seekTimer); leaveLobby();
-  net.inGame = true; net.eaten = []; net.stT = 0;
+  net.inGame = true; net.eaten = []; net.stT = 0; net.seed = d.seed >>> 0;
+  lastGame = { code: net.gameCode, hostName: net.hostName };
   startGame({ mp: true, seed: d.seed >>> 0, roster: d.roster.slice(0, MAXP) });
 }
 // ---- in-game messages ----
@@ -2044,7 +2071,7 @@ function onGulp(d, { peerId }) {
   if (v.alive && e) eatHole(e, v, d.pts | 0);
   else {
     v.alive = false; v.grp.visible = false;
-    if (e === player) { addPoints(player, d.pts | 0); banner(`You gulped ${v.name}!`, v.css, 1.8); sfx.holeEat(); stats.gulped++; }
+    if (e && e.isPlayer) { addPoints(player, d.pts | 0); banner(`You gulped ${v.name}!`, v.css, 1.8); sfx.holeEat(); stats.gulped++; }
   }
 }
 function onPick(d, { peerId }) {
@@ -2052,14 +2079,78 @@ function onPick(d, { peerId }) {
   const p = powerups.find(q => q.id === d.id);
   if (p && !p.dead) { p.dead = true; burst(p.x, 1.2, p.z, PU[p.type].color, 30, 6, .45); }
   const h = holeByPid(peerId);
-  if (d.type === 'freeze' && player.alive && state === 'play') {
+  if (d.type === 'freeze' && !net.spec && player.alive && state === 'play') {
     player.frozenT = 3; banner(`❄️ FROZEN by ${h ? h.name : 'someone'}!`, '#9feaff', 1.5); sfx.freeze();
   }
+}
+// ---- spectating ----
+function makeSnap() {
+  const gone = [];
+  for (let id = 0; id < objSeq; id++) if (!objById.has(id)) gone.push(id);
+  return { seed: net.seed, clk, gameT, frenzy, total: totalObjs, gone,
+    holes: holes.map(h => ({ pid: h.isPlayer ? net.myId : h.pid, name: h.name, c: h.baseColor.getHex(), x: r2(h.x), z: r2(h.z), R: r2(h.R),
+      level: h.level, score: h.score, growth: h.growth, alive: h.alive ? 1 : 0, lv: h.lv })),
+    pus: powerups.filter(p => !p.dead).map(p => ({ id: p.id, type: p.type, x: p.x, z: p.z })) };
+}
+async function trySpectate(lg) {
+  const g = net.gen;
+  setStatus('<span class="spin">🌀</span> Checking if your last game is still going…');
+  const room = net.lib.joinRoom({ ...NET_CFG, maxUsers: MAXP }, 'g-' + lg.code);
+  net.room = room; net.spec = 'probe'; net.snap = null; net.gameCode = lg.code; net.hostName = lg.hostName;
+  let self;
+  try { self = await room.getSelf(); } catch (e) { self = null; }
+  if (g !== net.gen || net.room !== room) return;
+  if (!self) { lastGame = null; leaveGameRoom(); searching(); return; }
+  net.myId = self.peerId;
+  wireRoom(room, lg.code);
+  setTimeout(() => {   // nobody answered: that game is over
+    if (g === net.gen && net.room === room && net.spec === 'probe' && !net.prompt) { lastGame = null; leaveGameRoom(); searching(); }
+  }, 12000);
+}
+function onSnap(d) {
+  if (net.spec !== 'probe' || net.prompt || !d || !Array.isArray(d.holes) || !d.holes.length) return;
+  net.snap = d;
+  net.prompt = { spectate: true, snap: d };
+  $('askText').textContent = `👀 Spectate ${net.hostName}'s game?`;
+  $('askSub').textContent = `You left this game. ${d.holes.length} player${d.holes.length > 1 ? 's are' : ' is'} still playing.`;
+  $('ask').classList.remove('hidden');
+  sfx.power();
+}
+function beginSpectate(d) {
+  clearTimeout(net.seekTimer); leaveLobby();
+  initAudio(); clearWorld();
+  net.spec = 'on'; net.inGame = true; mode = 'mp';
+  setHoles(d.holes.map(p => ({ name: p.name, color: p.c, remote: true, pid: p.pid })));
+  withRandom(mulberry32(d.seed >>> 0), genCity);
+  for (const id of d.gone) { const o = objById.get(id); if (o) removeObj(o); }
+  objects = objects.filter(o => o.state !== 'gone'); needsClean = false;
+  totalObjs = d.total || totalObjs;
+  const now = performance.now();
+  holes.forEach((h, i) => {
+    const p = d.holes[i];
+    h.x = h.nx = p.x; h.z = h.nz = p.z; h.R = h.nR = p.R; h.level = p.level; h.score = p.score; h.growth = p.growth; h.lv = p.lv;
+    h.alive = !!p.alive; h.dying = false; h.grp.visible = h.alive; h.netT = now;
+  });
+  for (const p of d.pus || []) spawnPU(p.type, p.x, p.z, p.id);
+  clk = d.clk || 0; gameT = d.gameT || 0; frenzy = !!d.frenzy;
+  player = holes.find(h => h.alive) || holes[0];
+  camBase.set(player.x, 30, player.z + 30); camLook.set(player.x, 0, player.z);
+  state = 'play'; only('hud', 'quit');
+  $('quit').textContent = '🚪 LEAVE';
+  updHUD(); drawMini(0);
+  banner(`👀 SPECTATING ${player.name}`, '#9be7ff', 2);
+}
+function followNext(dir = 1) {
+  if (!holes.length) return;
+  const i = holes.indexOf(player);
+  player = holes[((i < 0 ? 0 : i) + dir + holes.length) % holes.length];
+  banner(`👀 ${player.name}`, player.css, 1.1);
+  updHUD();
 }
 function leaveGameRoom() {
   const r = net.room; net.room = null; net.A = {};
   if (r) r.leave().catch(() => {});
-  net.isHost = false; net.roster = []; net.hostPeer = null; net.inGame = false; net.started = false;
+  net.isHost = false; net.roster = []; net.hostPeer = null; net.inGame = false; net.started = false; net.spec = null; net.snap = null;
 }
 function leaveLobby() {
   clearInterval(net.adTimer);
@@ -2109,11 +2200,11 @@ function step(dt, time) {
     }
   }
   if (state === 'play') {
-    if (net.inGame) netTick(dt);
-    if (!frenzy && objects.length <= Math.max(25, totalObjs * .03)) {
-      frenzy = true; banner('🔥 FINAL FRENZY! Everything is edible!', '#ff8bd1', 2.6); sfx.levelUp();
+    if (net.inGame && !net.spec) netTick(dt);
+    if (!frenzy && objects.length <= Math.max(25, totalObjs * .06)) {
+      frenzy = true; banner('🔥 FINAL FRENZY! Eat anything, everyone speeds up!', '#ff8bd1', 2.6); sfx.levelUp();
     }
-    if (objects.length === 0) { if (net.inGame) netSend('end', {}); endGame('eaten'); }
+    if (objects.length === 0) { if (net.inGame && !net.spec) netSend('end', {}); endGame('eaten'); }
   }
   // tiny props far from the action aren't worth drawing once you're huge
   lodT -= dt;
