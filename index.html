@@ -12,6 +12,45 @@
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" type="image/png" href="icon-180.png">
 <link rel="manifest" href="manifest.json">
+<script>
+/* ---- GULP CITY error log ----
+   Every crash/problem is saved on this device (last 60) with where you were in the game.
+   Nothing is sent anywhere: open "🐞 Problem log" on the menu to read or share it. */
+(function () {
+  var KEY = 'gulpcity_errors', log = [];
+  try { log = JSON.parse(localStorage.getItem(KEY) || '[]'); } catch (e) { log = []; }
+  window.__gcErrors = log;
+  window.__gcCtx = function () { return {}; };   // the game replaces this with "where you are"
+  window.__gcLog = function (kind, msg, extra) {
+    var where = {}; try { where = window.__gcCtx() || {}; } catch (e) {}
+    var e = { at: new Date().toISOString(), kind: kind, msg: String(msg || '').slice(0, 500), where: where };
+    if (extra) for (var k in extra) e[k] = extra[k];
+    var last = log[log.length - 1];
+    if (last && last.kind === e.kind && last.msg === e.msg) { last.n = (last.n || 1) + 1; last.at = e.at; last.where = where; }
+    else log.push(e);
+    if (log.length > 60) log.splice(0, log.length - 60);
+    try { localStorage.setItem(KEY, JSON.stringify(log)); } catch (err) {}
+    if (window.__gcOnLog) try { window.__gcOnLog(); } catch (err) {}
+  };
+  addEventListener('error', function (ev) {
+    if (ev.target && ev.target !== window && (ev.target.src || ev.target.href)) {   // a file failed to load
+      window.__gcLog('load', 'Could not load ' + (ev.target.src || ev.target.href)); return;
+    }
+    window.__gcLog('crash', ev.message, { file: (ev.filename || '').split('/').pop() + ':' + ev.lineno + ':' + ev.colno,
+      stack: ev.error && ev.error.stack ? String(ev.error.stack).slice(0, 800) : '' });
+  }, true);
+  addEventListener('unhandledrejection', function (ev) {
+    var r = ev.reason; window.__gcLog('crash', r && r.message ? r.message : String(r), { stack: r && r.stack ? String(r.stack).slice(0, 800) : '' });
+  });
+  var ce = console.error;
+  console.error = function () {
+    try { window.__gcLog('error', Array.prototype.map.call(arguments, function (a) { return a && a.message ? a.message : String(a); }).join(' ')); } catch (e) {}
+    return ce.apply(console, arguments);
+  };
+  // if the game code never starts (no internet for the 3D engine, very old browser…) say so
+  setTimeout(function () { if (!window.__gcStarted) window.__gcLog('load', 'The game did not start within 20 seconds'); }, 20000);
+})();
+</script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{width:100%;height:100%;overflow:hidden;background:#000;
@@ -189,6 +228,7 @@ canvas{display:block;touch-action:none}
     🧲 Magnet &nbsp; ⚡ Speed &nbsp; ❄️ Freeze rivals &nbsp; ✨ Golden things = 5× points
   </div>
   <div id="best"></div>
+  <button id="bugBtn" class="btn small grey">🐞 Problem log</button>
 </div>
 
 <div id="mp" class="screen hidden">
@@ -205,6 +245,22 @@ canvas{display:block;touch-action:none}
     <div id="mpPlayers"></div>
     <button id="mpStart" class="btn small hidden">▶ START GAME</button>
     <button id="mpBack" class="btn small grey">◀ BACK</button>
+  </div>
+</div>
+
+<div id="bugs" class="screen hidden">
+  <div class="box" style="background:rgba(24,16,52,.85);border-radius:20px;padding:18px 22px;max-width:min(760px,94vw);width:100%;
+    border:2px solid rgba(255,255,255,.2);display:flex;flex-direction:column;gap:12px">
+    <h2 style="font-size:26px;color:#ffe66d">🐞 PROBLEM LOG</h2>
+    <div style="font-size:14px;opacity:.85">Crashes and problems saved on this device, newest first. Share it to send it to whoever is fixing the game.</div>
+    <div id="bugList" style="text-align:left;font-size:13px;line-height:1.45;max-height:52vh;overflow:auto;user-select:text;-webkit-user-select:text;
+      background:rgba(0,0,0,.3);border-radius:12px;padding:10px 12px;font-family:ui-monospace,Menlo,Consolas,monospace"></div>
+    <div class="btns">
+      <button id="bugShare" class="btn small">📤 SHARE / COPY</button>
+      <button id="bugClear" class="btn small grey">🗑 CLEAR</button>
+      <button id="bugBack" class="btn small grey">◀ BACK</button>
+    </div>
+    <div id="bugMsg" style="font-size:14px;min-height:18px"></div>
   </div>
 </div>
 
@@ -300,6 +356,8 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.body.prepend(renderer.domElement);
 const canvas = renderer.domElement;
+canvas.addEventListener('webglcontextlost', e => { e.preventDefault(); window.__gcLog('graphics', 'WebGL context lost (the iPad ran out of graphics memory?)'); });
+canvas.addEventListener('webglcontextrestored', () => window.__gcLog('graphics', 'WebGL context restored'));
 
 const scene = new THREE.Scene();
 const skyCol = new THREE.Color(0x8fd8ff);
@@ -1889,7 +1947,7 @@ let state = 'menu', mode = 'sp', hudT = 0, miniT = 0, lodT = 0, overLock = false
 const bestKey = 'gulpcity_best';
 const getBest = () => +(localStorage.getItem(bestKey) || 0);
 function showBest() { const b = getBest(); $('best').textContent = b ? `🏆 Best score: ${b.toLocaleString()}` : ''; }
-const screens = ['menu', 'mp', 'over', 'hud', 'quit', 'ask', 'dash'];
+const screens = ['menu', 'mp', 'over', 'hud', 'quit', 'ask', 'dash', 'bugs'];
 function only(...ids) { for (const s of screens) $(s).classList.toggle('hidden', !ids.includes(s)); }
 
 let clearing = false;
@@ -2151,6 +2209,54 @@ function updDash(dt) {
 }
 $('dash').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); doDash(); });
 
+/* ---------------- problem log (see the script in <head>) ---------------- */
+const VERSION = '2026-11-22e';
+window.__gcStarted = true;
+window.__gcCtx = () => ({
+  player: localStorage.getItem('gulpcity_name') || '(no name)',
+  screen: state,
+  mode: state === 'play' || state === 'over' ? (mode === 'mp' ? 'multiplayer' : 'single player') + ' · ' + (gameMode === 'classic' ? 'Classic' : 'Town ' + town) : '',
+  role: net.spec ? 'spectator' : net.inGame ? (net.isHost ? 'host' : 'guest') : '',
+  players: holes.length, size: player ? player.level + 1 : 0, time: fmtT(gameT), quality: qLevel, version: VERSION,
+});
+const deviceInfo = () => [
+  navigator.userAgent,
+  `screen ${screen.width}x${screen.height} @${devicePixelRatio}x, window ${innerWidth}x${innerHeight}`,
+  (matchMedia('(display-mode: standalone)').matches || navigator.standalone) ? 'Home Screen app' : 'browser tab',
+  'GPU ' + (() => { try { const gl = renderer.getContext(), d = gl.getExtension('WEBGL_debug_renderer_info'); return d ? gl.getParameter(d.UNMASKED_RENDERER_WEBGL) : 'unknown'; } catch (e) { return 'unknown'; } })(),
+].join('\n');
+function bugText() {
+  const L = window.__gcErrors.slice().reverse();
+  const head = `GULP CITY problem log · version ${VERSION} · ${new Date().toLocaleString()}\n${deviceInfo()}\n${L.length} problem(s)\n`;
+  return head + L.map((e, i) => {
+    const w = e.where || {}, where = [w.player && 'player ' + w.player, w.screen && 'on ' + w.screen, w.mode, w.role, w.players && w.players + ' holes',
+      w.size && 'size ' + w.size, w.time && 'at ' + w.time, w.quality != null && w.quality !== '' && 'quality ' + w.quality].filter(Boolean).join(' · ');
+    return `\n#${i + 1} [${e.kind}] ${new Date(e.at).toLocaleString()}${e.n > 1 ? ` (×${e.n})` : ''}\n  ${e.msg}${e.file ? '\n  at ' + e.file : ''}\n  where: ${where || '?'}${e.stack ? '\n  ' + e.stack.split('\n').slice(0, 4).join('\n  ') : ''}`;
+  }).join('\n');
+}
+function updBugBtn() {
+  const n = window.__gcErrors.length;
+  $('bugBtn').textContent = n ? `🐞 Problem log (${n})` : '🐞 Problem log';
+}
+window.__gcOnLog = updBugBtn;
+function openBugs() {
+  only('bugs'); $('bugMsg').textContent = '';
+  const esc = t => t.replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[c]);
+  $('bugList').innerHTML = window.__gcErrors.length ? esc(bugText()).replace(/\n/g, '<br>') : '✅ No problems logged on this device. Nice!';
+}
+$('bugBtn').addEventListener('click', openBugs);
+$('bugBack').addEventListener('click', () => { only('menu'); updBugBtn(); });
+$('bugClear').addEventListener('click', () => { window.__gcErrors.length = 0; localStorage.removeItem('gulpcity_errors'); openBugs(); $('bugMsg').textContent = 'Cleared.'; });
+$('bugShare').addEventListener('click', async () => {
+  const text = bugText();
+  try {
+    if (navigator.share) { await navigator.share({ title: 'GULP CITY problem log', text }); $('bugMsg').textContent = 'Shared!'; return; }
+  } catch (e) { if (e && e.name === 'AbortError') return; }
+  try { await navigator.clipboard.writeText(text); $('bugMsg').textContent = '📋 Copied! Paste it into a message or email.'; }
+  catch (e) { $('bugMsg').textContent = 'Select the text above and copy it.'; }
+});
+updBugBtn();
+
 /* ---------------- kill button ----------------
    3 kills per game: tap 💀, tap a name, they're gone (they respawn shortly after, like being gulped). */
 const KILLS = 3;
@@ -2271,7 +2377,7 @@ async function mpFind() {
   mpShow('search'); setStatus('<span class="spin">🌀</span> Connecting…');
   const g = ++net.gen;
   try { net.lib = net.lib || await import(TRYSTERO_URL); }
-  catch (e) { if (g === net.gen) setStatus('❌ Couldn\'t load multiplayer. Check your internet and try again.'); return; }
+  catch (e) { window.__gcLog('net', 'Multiplayer library failed to load: ' + (e && e.message)); if (g === net.gen) setStatus('❌ Couldn\'t load multiplayer. Check your internet and try again.'); return; }
   if (g !== net.gen) return;
   const lobby = net.lib.joinRoom(NET_CFG, LOBBY_ROOM);
   net.lobby = lobby;
@@ -2383,7 +2489,8 @@ function wireRoom(room, code) {
   net.A.mode.onMessage((d, { peerId }) => { if (peerId === net.hostPeer && d && MODE_NAMES[d.m]) { net.lobbyMode = d.m; renderLobby(); } });
   room.onPeerJoin(({ peerId }) => net.A.hi && net.A.hi.send({ name: net.name, host: net.isHost, spec: !!net.spec, c: myColor }, { target: peerId }).catch(() => {}));
   room.onPeerLeave(({ peerId }) => onLeave(peerId));
-  room.onError(e => { if (e.code === 'room-full' && state === 'lobby' && !net.isHost && !net.spec) kicked(code, 'That game is full — still looking…'); });
+  room.onError(e => {
+    if (e.code !== 'room-full') window.__gcLog('net', e.code + ': ' + (e.message || '')); if (e.code === 'room-full' && state === 'lobby' && !net.isHost && !net.spec) kicked(code, 'That game is full — still looking…'); });
 }
 function kicked(code, msg) {
   net.declined.add(code);
@@ -2684,7 +2791,7 @@ function adaptQuality(raw) {
   qT += raw; qFrames++;
   if (qT < 2) return;
   const fps = qFrames / qT; qT = 0; qFrames = 0;
-  if (fps < 38 && qLevel < QUALITY.length - 1) { setQuality(qLevel + 1); qGood = 0; }
+  if (fps < 38 && qLevel < QUALITY.length - 1) { setQuality(qLevel + 1); qGood = 0; if (qLevel === QUALITY.length - 1) window.__gcLog('slow', `Running slowly (${fps.toFixed(0)} fps) — dropped to lowest graphics quality`); }
   else if (fps > 57) { if (++qGood >= 5 && qLevel > 0) { setQuality(qLevel - 1); qGood = 0; } }
   else qGood = 0;
 }
