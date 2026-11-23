@@ -74,8 +74,69 @@ async function browser(label) {
   const session = { send, evaluate, errors, T: c => evaluate('window.__t(' + JSON.stringify(c) + ')') };
   sessions.push(session); return session;
 }
+async function verify() {
 try {
-  const a = await browser('host'), b = await browser('guest');
+  const a = await browser('host');
+  // Traffic pauses at the correct curb, including reverse lanes and journeys across the map seam.
+  await a.T(`startGame(); baseSeed=12345; loadTown(1);`);
+  const initialStops = await a.T('busStops.length');
+  assert.ok(initialStops > 0, 'town starts with working bus stops');
+  await a.T('clk=19.999; updateBusStops()');
+  assert.equal(await a.T('busStops.length'), initialStops, 'no early stop');
+  await a.T('clk=20; updateBusStops(); updateBusStops()');
+  assert.equal(await a.T('busStops.length'), initialStops + 1, 'one stop at 20 seconds, without duplicates');
+  await a.T('clk=40; updateBusStops()');
+  assert.equal(await a.T('busStops.length'), initialStops + 2, 'another stop at 40 seconds');
+  await a.T(`loadTown(town); clk=40; updateBusStops()`);
+  assert.equal(await a.T('objects.filter(o=>o.id==="stop-timed-0").length'), 1, 'town reload keeps deterministic stop IDs');
+  for (const axis of ['x', 'z']) for (const dir of [-1, 1]) {
+    const result = await a.T(`(() => {
+      const axis=${JSON.stringify(axis)}, dir=${dir}, road=ROADS[0], pos=BLOCKS[0];
+      const id='test-stop-'+axis+dir;
+      for (const old of busStops) if(old.state==='idle'&&old.stop.axis===axis&&old.stop.dir===dir&&old.stop.road===road) removeObj(old);
+      addBusStop({road,axis,dir,pos},id);
+      const bus=spawnVehicle(pos-dir*2,road,axis,dir,5,'bus');
+      moveObj(bus,.4,0);
+      const arrived=bus[axis], waiting=bus.move.wait;
+      moveObj(bus,2.5,0); const held=bus[axis];
+      moveObj(bus,.75,0); const resumed=bus[axis];
+      removeObj(objById.get(id));
+      bus[axis]=pos-dir*2; bus.move.wait=0; bus.move.sinceStop=4;
+      moveObj(bus,.8,0);
+      return {pos,arrived,waiting,held,resumed,skipped:bus.move.wait===0};
+    })()`);
+    assert.ok(Math.abs(result.arrived - result.pos) < 1e-6, axis + dir + ' reaches stop');
+    assert.ok(Math.abs(result.waiting - 3) < 1e-6, 'three-second dwell');
+    assert.equal(result.held, result.arrived, 'bus stays at stop');
+    assert.ok((result.resumed - result.arrived) * dir > 0, 'bus resumes in its lane direction');
+    assert.equal(result.skipped, true, 'swallowed stop is skipped');
+  }
+  assert.equal(await a.T(`(() => {
+    const road=ROADS[0], pos=-WRAP+5;
+    addBusStop({road,axis:'x',dir:1,pos},'wrap-stop');
+    const bus=spawnVehicle(WRAP-2,road,'x',1,5,'bus'); moveObj(bus,1.4,0);
+    return Math.abs(bus.x-pos)<1e-6 && Math.abs(bus.move.wait-3)<1e-6;
+  })()`), true, 'bus stops after crossing the map seam');
+  assert.equal(await a.T('townOf({remote:true,town:0})'), 0, 'Classic city stays town zero');
+  await a.T('clk=600; refillTown(town,1)');
+  const rebuiltStops = await a.T('busStops.length');
+  await a.T('clk=619.999; updateBusStops()');
+  assert.equal(await a.T('busStops.length'), rebuiltStops, 'rebuilt town starts a fresh stop timer');
+  await a.T('clk=620; updateBusStops()');
+  assert.equal(await a.T('busStops.length'), rebuiltStops + 1, 'stop timer continues after town rebuild');
+  await a.T(`keys.KeyD=true; touch.active=true; touch.id=7; window.dispatchEvent(new Event('blur'))`);
+  assert.deepEqual(await a.T('inputDir()'), [0, 0], 'focus loss clears keyboard and touch movement');
+  if (process.env.BUS_SHOT) {
+    await a.T(`clearWorld(); busStops=[]; addBusStop({road:0,axis:'x',dir:1,pos:0},'photo-stop');
+      spawnVehicle(0,0,'x',1,5,'bus'); only(); syncHoles(0);
+      camera.position.set(8,7,9); camera.lookAt(0,1,-2); renderer.render(scene,camera)`);
+    const shot = await a.send('Page.captureScreenshot', {format:'png'});
+    fs.writeFileSync(process.env.BUS_SHOT, Buffer.from(shot.data,'base64'));
+  }
+  await a.T('toMenu()');
+  console.log('PASS bus arrivals, dwell, departures, swallowed stops, map wrap, spawn timer and input fixes');
+  if (process.argv.includes('--traffic-only')) return;
+  const b = await browser('guest');
   // Zoom gestures are cancelled in-game, but ordinary movement and menus still work.
   assert.equal(await a.T(`(() => { const e = new Event('gesturestart', {cancelable:true}); document.dispatchEvent(e); return e.defaultPrevented; })()`), false);
   await a.T(`$('playBtn').click()`);
@@ -110,6 +171,14 @@ try {
   assert.equal(await a.T('baseSeed'), await b.T('baseSeed'), 'shared city seed');
   const signature = `objects.filter(o=>!o.move&&o.kind!=='person').map(o=>[o.id,o.kind,o.x,o.z,o.gold])`;
   assert.deepEqual(await a.T(signature), await b.T(signature), 'same city in both browsers');
+  await a.T('clk=20; updateBusStops()'); await b.T('clk=20; updateBusStops()');
+  assert.deepEqual(await a.T('busStops.map(o=>[o.id,o.x,o.z])'), await b.T('busStops.map(o=>[o.id,o.x,o.z])'), 'new bus stops match in multiplayer');
+  const authority = await a.T('busAuthority()===net.myId') ? a : b;
+  const follower = authority === a ? b : a;
+  await authority.T(`window.__busTestId=objects.find(o=>o.kind==='bus'&&o.move).id;
+    const bus=objById.get(window.__busTestId); bus.move.wait=2.5; netState()`);
+  const busId = await authority.evaluate('window.__busTestId');
+  await until(() => follower.T(`Math.abs(objById.get(${JSON.stringify(busId)}).move.wait-2.5)<.02`), 'bus stopping state synchronised online');
   await a.T('player.x = 12; player.z = 8; player.score = 123; netState()');
   await until(() => b.T('holes.find(h=>h.remote).score === 123 && holes.find(h=>h.remote).nx === 12'), 'movement and score relayed');
 
@@ -165,3 +234,5 @@ try {
   server.closeAllConnections(); server.close();
   // Profiles can stay locked briefly after Edge exits; they live under the OS temporary directory.
 }
+}
+await verify();
