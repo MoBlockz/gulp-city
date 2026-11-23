@@ -77,6 +77,49 @@ async function browser(label) {
 async function verify() {
 try {
   const a = await browser('host');
+  assert.equal(await a.evaluate('document.querySelector("#killBtn,#killPanel")'), null, 'instant-kill controls removed');
+  assert.equal(await a.T('typeof doKill'), 'undefined', 'instant-kill code removed');
+  await a.T('startGame(); loadTown(16)');
+  assert.deepEqual(await a.T('({blocks:layout.length,giant:!!giantObj})'), {blocks:225,giant:true}, 'expanded city keeps its central giant tower');
+  assert.deepEqual(await a.T(`(() => {
+    const a={R:1,level:0,phantomT:0}, b={R:3,level:4,phantomT:0};
+    frenzy=true; const atLimit=canEatHole(a,b); b.R=3.001; const overLimit=canEatHole(a,b);
+    frenzy=false; const ordinary=canEatHole(a,b); a.phantomT=60; b.R=15; const phantom=canEatHole(a,b);
+    return {atLimit,overLimit,ordinary,phantom};
+  })()`), {atLimit:true,overLimit:false,ordinary:false,phantom:true}, '3x boundary and Phantom exception');
+  assert.deepEqual(await a.T(`(() => {
+    setHoles([{name:'Attacker',color:0x8a5cff,player:true},{name:'Bigger',color:0xff4f9a}]);
+    resetHoles([[0,0],[.2,0]]); frenzy=true;
+    player.R=1; player.vx=5; holes[1].R=3; holes[1].shield=0;
+    holeVsHole(); return {attacker:player.alive,target:holes[1].alive};
+  })()`), {attacker:true,target:false}, 'a moving player can actually gulp a 3x rival in Frenzy');
+  assert.equal(await a.T(`(() => {
+    resetHoles([[0,0],[.2,0]]); frenzy=false;
+    player.R=1; player.phantomT=60; holes[1].R=15; holes[1].shield=12;
+    holeVsHole(); return player.alive && !holes[1].alive;
+  })()`), true, 'Phantom gulps even a giant shielded rival');
+  await a.T(`resetHoles([[0,0],[20,20]]); holes[1].phantomT=60; player.phantomT=60; syncHoles(0); updateTags()`);
+  assert.deepEqual(await a.T(`({enemyVisible:holes[1].grp.visible,cutout:holeUniform.value[1].z,
+    tag:holes[1].tag.style.display,selfVisible:player.grp.visible})`),
+    {enemyVisible:false,cutout:0,tag:'none',selfVisible:true}, 'Phantom hides opponent mesh, ground cutout, and name while owner remains controllable');
+  assert.equal(await a.T(`(() => {
+    const enemy=holes[1], x=(enemy.x+CITY)*miniC.width/(CITY*2), y=(enemy.z+CITY)*miniC.width/(CITY*2);
+    const original=miniG.arc; let shown=false;
+    miniG.arc=function(ax,ay,...args){ if(Math.abs(ax-x)<.01&&Math.abs(ay-y)<.01) shown=true; return original.call(this,ax,ay,...args); };
+    try { drawMini(0); } finally { miniG.arc=original; } return shown;
+  })()`), false, 'invisible opponent is absent from minimap');
+  assert.deepEqual(await a.T(`(() => { const ai=holes[1]; ai.mode='target'; ai.tk='hole'; ai.target=player; ai.aiT=10;
+    return aiDir(ai,.01); })()`), [0,0], 'AI abandons a target that turns invisible');
+  await a.T('updateHoles(60.01,0); syncHoles(0)');
+  assert.equal(await a.T('holes[1].phantomT===0 && holes[1].grp.visible'), true, 'invisibility expires after one minute');
+  await a.T('frenzy=false; gameT=0; phantomReadyAt=0');
+  assert.equal(await a.T('withRandom(()=>.049,rollPUType)'), 'phantom', 'eligible roll below 5% spawns Phantom');
+  assert.notEqual(await a.T('withRandom(()=>.05,rollPUType)'), 'phantom', '5% threshold is exclusive');
+  await a.T(`spawnPU('phantom',30,30); true`);
+  assert.equal(await a.T('phantomReadyAt'), 600, 'Phantom starts ten-minute spawn cooldown');
+  assert.notEqual(await a.T('gameT=599.999; withRandom(()=>0,rollPUType)'), 'phantom', 'cooldown prevents early repeat');
+  assert.equal(await a.T('gameT=600; withRandom(()=>0,rollPUType)'), 'phantom', 'new rare roll allowed after ten minutes');
+  console.log('PASS larger maps, removed instant kills, 3x limit, Phantom effects, duration, chance and cooldown');
   // Traffic pauses at the correct curb, including reverse lanes and journeys across the map seam.
   await a.T(`startGame(); baseSeed=12345; loadTown(1);`);
   const initialStops = await a.T('busStops.length');
@@ -187,11 +230,23 @@ try {
   await a.T(`net.eaten.push(${JSON.stringify(object)}); netState()`);
   await until(() => b.T(`!objById.has(${JSON.stringify(object)}) || objById.get(${JSON.stringify(object)}).state !== 'idle'`), 'swallowed objects synchronised');
 
-  // Kill, respawn, and leaving use control messages rather than direct connections too.
+  // Phantom state hides the player on the other browser, and old instant-kill packets have no effect.
+  assert.equal(await a.T(`['kill','died','kblock'].some(n=>n in net.A)`), false, 'instant-kill network actions removed');
+  await a.T(`applyPU(player,{type:'phantom',x:player.x,z:player.z}); netState()`);
+  await until(() => b.T('holes.find(h=>h.remote).phantomT>59'), 'Phantom state synchronised online');
+  await b.T('syncHoles(0); updateTags()');
+  assert.equal(await b.T('!holes.find(h=>h.remote).grp.visible && holes.find(h=>h.remote).tag.style.display==="none"'), true, 'opponent is invisible online');
+  await a.T(`net.room.makeAction('kill').send({t:net.roster[1].id})`);
+  await pause(300);
+  assert.equal(await b.T('player.alive'), true, 'legacy kill packet ignored');
+  await a.T('player.phantomT=0; player.R=4.6; player.growth=2600; player.level=5; netState()');
+  await until(() => b.T('holes.find(h=>h.remote).nR===4.6 && holes.find(h=>h.remote).phantomT===0'), 'Phantom ends online');
+  // Ordinary swallowing and respawn still work without the deleted kill mechanic.
   await b.T('player.shield = 0; netState()');
   await pause(500);
-  await a.T('holes.find(h=>h.remote).shield = 0; doKill(holes.find(h=>h.remote))');
-  await until(() => b.T('!player.alive'), 'rival kill relayed');
+  await b.T(`const other=holes.find(h=>h.remote); other.R=other.nR; other.x=other.nx; other.z=other.nz;
+    player.x=other.x; player.z=other.z; holeVsHole()`);
+  await until(() => b.T('!player.alive'), 'ordinary gulp relayed');
   for (let i = 0; i < 30; i++) {
     await b.T('for(let j=0;j<6;j++) step(1/30,0)');
     await pause(200);

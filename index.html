@@ -167,21 +167,6 @@ canvas{display:block;touch-action:none}
   box-shadow:0 3px 0 rgba(0,0,0,.3);transition:transform .1s}
 .sw.on{border-color:#ffe66d;transform:scale(1.22);box-shadow:0 0 0 3px #2a1a5e,0 0 12px #ffe66d}
 .sw.taken{opacity:.2;pointer-events:none}
-#killBtn{position:absolute;top:calc(12px + env(safe-area-inset-top));right:calc(12px + env(safe-area-inset-right));pointer-events:auto;
-  font:inherit;font-size:18px;font-weight:900;padding:9px 18px;border-radius:999px;border:3px solid #fff;cursor:pointer;color:#fff;
-  background:linear-gradient(#ff5d5d,#c62828);box-shadow:0 5px 0 #7f1515,0 8px 16px rgba(0,0,0,.35);text-shadow:0 2px 0 rgba(0,0,0,.35)}
-#killBtn:active{transform:translateY(3px);box-shadow:0 2px 0 #7f1515}
-#killBtn:disabled{filter:grayscale(1);opacity:.6;pointer-events:none}
-#killPanel{position:absolute;top:calc(68px + env(safe-area-inset-top));right:calc(12px + env(safe-area-inset-right));z-index:6;pointer-events:auto;
-  min-width:250px;max-height:70vh;overflow:auto;background:rgba(40,10,20,.88);border-color:#ff6b6b}
-#killPanel .ttl{font-size:13px;font-weight:900;letter-spacing:1px;color:#ffb3b3;margin-bottom:6px;display:flex;justify-content:space-between;gap:10px}
-#killClose{font:inherit;background:none;border:none;color:#fff;font-size:18px;cursor:pointer}
-.kname{display:flex;align-items:center;gap:9px;width:100%;font:inherit;font-size:17px;font-weight:900;color:#fff;cursor:pointer;
-  background:rgba(255,255,255,.08);border:2px solid rgba(255,255,255,.2);border-radius:12px;padding:8px 10px;margin:4px 0;text-align:left}
-.kname:active{background:rgba(255,80,80,.5)}
-.kname .dot{width:14px;height:14px;border-radius:50%;border:2px solid #fff;flex:none}
-.kname small{margin-left:auto;opacity:.75;font-size:13px}
-.kname:disabled{opacity:.4;pointer-events:none}
 #ask{position:fixed;inset:0;z-index:30;display:flex;align-items:center;justify-content:center;background:rgba(10,5,30,.6)}
 #ask .box{background:#2a1a5e;border:3px solid #ffe66d;border-radius:22px;padding:22px 30px;text-align:center;color:#fff;display:flex;flex-direction:column;gap:16px;
   box-shadow:0 14px 40px rgba(0,0,0,.5);max-width:92vw}
@@ -208,8 +193,6 @@ canvas{display:block;touch-action:none}
     <div id="canEat"></div>
   </div>
   <div id="timer" class="panel">2:00</div>
-  <button id="killBtn">💀 KILL ×3</button>
-  <div id="killPanel" class="panel hidden"><div class="ttl"><span>TAP A NAME TO KILL THEM</span><button id="killClose">✖</button></div><div id="killList"></div></div>
   <div id="board" class="panel"><div class="ttl">LEADERBOARD</div><div id="rows"></div></div>
   <div id="chips"></div>
   <div id="banner"></div>
@@ -235,6 +218,7 @@ canvas{display:block;touch-action:none}
     <b>20 Towns:</b> grow big enough to move up to a bigger town · reach Town 20 to win<br>
     <b>Classic:</b> one giant city, no levels · the game ends when the whole city is gulped<br>
     🧲 Magnet &nbsp; ⚡ Speed &nbsp; ❄️ Freeze rivals &nbsp; ✨ Golden things = 5× points
+    <br>👻 Rare Phantom: invisible + eat any player for 60s · 5% chance · 10-minute spawn cooldown
   </div>
   <div id="best"></div>
   <button id="bugBtn" class="btn small grey">🐞 Problem log</button>
@@ -332,7 +316,9 @@ const EAT = 0.9;            // an object fits if its radius <= hole radius * EAT
 // town size: NB x NB blocks. Changes from town to town (3x3 villages up to 11x11 cities)
 let NB, HALF, CITY, WRAP, BLOCKS, ROADS;
 function setDims(nb) {
-  NB = nb; HALF = NB * 15 + 4; CITY = NB * 15 + 5; WRAP = CITY + 4;
+  NB = Math.round(nb * Math.SQRT2);
+  if (nb === 11 && NB % 2 === 0) NB--; // keep a central block for the giant tower
+  HALF = NB * 15 + 4; CITY = NB * 15 + 5; WRAP = CITY + 4;
   BLOCKS = Array.from({ length: NB }, (_, i) => (i - (NB - 1) / 2) * 30);
   ROADS = Array.from({ length: NB + 1 }, (_, i) => (i - NB / 2) * 30);
 }
@@ -1288,7 +1274,7 @@ function makeHole(def) {
   return { name: def.name, baseColor: new THREE.Color(def.color), css, isPlayer: !!def.player, remote: !!def.remote, pid: def.pid || null,
     grp, tm, rimMat, rim, mag, tag, glow, glowMat,
     x: 0, z: 0, vx: 0, vz: 0, R: LEVELS[0].R, level: 0, growth: 0, score: 0, alive: true, dying: false, lv: 0,
-    respawnT: 0, frozenT: 0, speedT: 0, magnetT: 0, shield: 0, spd: rand(.8, .88), caution: rand(.6, .95), lazy: rand(.15, .28),
+    respawnT: 0, frozenT: 0, speedT: 0, magnetT: 0, phantomT: 0, shield: 0, spd: rand(.8, .88), caution: rand(.6, .95), lazy: rand(.15, .28),
     aiT: 0, mode: 'wander', target: null, tk: null, wx: 0, wz: 0, fx: 0, fz: 0, chkT: 0, cx: 0, cz: 0, stuckT: 0, sdx: 0, sdz: 0,
     nx: 0, nz: 0, nvx: 0, nvz: 0, nR: LEVELS[0].R, netT: 0 };
 }
@@ -1317,7 +1303,7 @@ function resetHoles(starts) {
   holes.forEach((h, i) => {
     h.x = h.nx = starts[i][0]; h.z = h.nz = starts[i][1]; h.vx = h.vz = h.nvx = h.nvz = 0;
     h.level = 0; h.growth = 0; h.keep = 0; h.score = 0; h.R = h.nR = LEVELS[0].R; h.lv = 0;
-    h.alive = true; h.dying = false; h.frozenT = h.speedT = h.magnetT = 0; h.shield = 0; h.boostT = 0;
+    h.alive = true; h.dying = false; h.frozenT = h.speedT = h.magnetT = h.phantomT = 0; h.shield = 0; h.boostT = 0;
     h.aiT = 0; h.stuckT = 0; h.grp.visible = true;
   });
 }
@@ -1353,15 +1339,6 @@ function respawnHole(h) {
   ringFX(h.x, h.z, 1, h.baseColor);
   if (h.isPlayer && state === 'play') banner('BACK! 🛡️ SAFE + ⚡ 2× SPEED FOR 10s', '#c3a6ff', 2.2);
 }
-// zapped by a KILL: the hole shrinks away where it stands, then respawns like after a gulp
-function killHole(b, byName) {
-  b.alive = false; b.dying = true; b.dieT = 0; b.dieR = b.R; b.eater = b; b.respawnT = 3;
-  for (const o of objects) if (o.state === 'fall' && o.owner === b) removeObj(o);
-  if (!b.remote) { b.keep = Math.floor(b.growth * .4); b.growth = 0; b.level = 0; }
-  b.speedT = b.magnetT = b.frozenT = 0; b.boostT = 0;
-  burst(b.x, .4, b.z, 0xff3b3b, 50, 9, .6); ringFX(b.x, b.z, Math.max(1, b.dieR), 0xff3b3b);
-  if (b.isPlayer && state === 'play') { banner(`💀 KILLED by ${byName}! Respawning…`, '#ff6b6b', 2.6); sfx.gulped(); shake = Math.max(shake, 1.3); }
-}
 // a swallows b. Returns the points it was worth. In multiplayer the victim decides (it's the one that knows where it really is).
 function eatHole(a, b, pts) {
   if (pts == null) pts = 25 + Math.floor(b.growth * 0.4);
@@ -1369,7 +1346,7 @@ function eatHole(a, b, pts) {
   for (const o of objects) if (o.state === 'fall' && o.owner === b) removeObj(o);
   addPoints(a, pts);
   if (!b.remote) { b.keep = Math.floor(b.growth * .4); b.growth = 0; b.level = 0; }
-  b.speedT = b.magnetT = b.frozenT = 0; b.boostT = 0;
+  b.speedT = b.magnetT = b.frozenT = b.phantomT = 0; b.boostT = 0;
   burst(b.x, .4, b.z, b.baseColor.getHex(), 45, 8, .6);
   if (a.isPlayer && state === 'play') {
     popup(b.x, 1, b.z, `+${pts} GULP!`, 'big');
@@ -1388,10 +1365,25 @@ const PU = {
   magnet: { color: 0xff3b3b, css: '#ff4d4d', icon: '🧲', label: 'MAGNET!' },
   speed:  { color: 0xffd400, css: '#f5b800', icon: '⚡', label: 'SPEED BOOST!' },
   freeze: { color: 0x6fe3ff, css: '#38bfe0', icon: '❄️', label: 'RIVALS FROZEN!' },
-  shield: { color: 0x3dff8c, css: '#1fbf63', icon: '🛡️', label: 'SHIELD! Nothing can hurt you' },
+  shield: { color: 0x3dff8c, css: '#1fbf63', icon: '🛡️', label: 'SHIELD! Blocks normal gulps and freezes' },
+  phantom: { color: 0xc89cff, css: '#d4b3ff', icon: '👻', label: 'PHANTOM! Invisible + eat any player for 60s!' },
 };
 const SHIELD_TIME = 12;
+const PHANTOM_TIME = 60, PHANTOM_COOLDOWN = 600, PHANTOM_CHANCE = .05;
+const NORMAL_PU = ['magnet', 'speed', 'freeze', 'shield'];
+let phantomReadyAt = 0;
+function rollPUType() {
+  if (state === 'play' && isRoomAuthority() && gameT >= phantomReadyAt && Math.random() < PHANTOM_CHANCE) return 'phantom';
+  return pick(NORMAL_PU);
+}
 const puIconGeo = {
+  phantom: merge([
+    part(G.sph, 0xf4e8ff, [0, .15, 0], [.48, .55, .3]),
+    part(G.cone, 0xf4e8ff, [-.3, -.36, 0], [.18, .35, .22], [0, 0, Math.PI]),
+    part(G.cone, 0xf4e8ff, [0, -.36, 0], [.18, .35, .22], [0, 0, Math.PI]),
+    part(G.cone, 0xf4e8ff, [.3, -.36, 0], [.18, .35, .22], [0, 0, Math.PI]),
+    part(G.sph, 0x432575, [-.17, .22, .28], [.08, .12, .04]),
+    part(G.sph, 0x432575, [.17, .22, .28], [.08, .12, .04])]),
   magnet: merge([
     part(new THREE.TorusGeometry(.45, .16, 8, 16, Math.PI), 0xff3b3b, [0, 0, 0], [1, 1, 1], [0, 0, Math.PI]),
     part(G.box, 0xdddddd, [-.45, .14, 0], [.34, .3, .34]), part(G.box, 0xdddddd, [.45, .14, 0], [.34, .3, .34])]),
@@ -1415,7 +1407,9 @@ const puIconGeo = {
 const puIconMat = new THREE.MeshBasicMaterial({ vertexColors: true });
 let powerups = [], puTimer = 4, puSeq = 0;
 // In multiplayer one player (the "authority") rolls power-ups and tells everyone else where they are.
-function spawnPU(type = pick(Object.keys(PU)), x, z, id) {
+function spawnPU(type = rollPUType(), x, z, id) {
+  if (!PU[type]) return;
+  if (type === 'phantom') phantomReadyAt = Math.max(phantomReadyAt, gameT + PHANTOM_COOLDOWN);
   if (x == null) [x, z] = roadPoint();
   if (id == null) id = (net.myId || 'sp') + ':' + (puSeq++);
   const icon = new THREE.Mesh(puIconGeo[type], puIconMat); icon.position.y = 1.4; icon.scale.setScalar(1.3);
@@ -1425,7 +1419,7 @@ function spawnPU(type = pick(Object.keys(PU)), x, z, id) {
   const beam = new THREE.Mesh(new THREE.CylinderGeometry(.9, .9, 3, 16, 1, true), glowMat); beam.position.y = 1.5; beam.scale.set(1, 1, 1);
   beam.material = glowMat.clone(); beam.material.opacity = .12;
   const grp = grpOf(icon, glow, beam); grp.position.set(x, 0, z); scene.add(grp);
-  const p = { id, type, x, z, grp, icon, t: 0, life: 30, dead: false };
+  const p = { id, type, x, z, grp, icon, t: 0, life: type === 'phantom' ? 120 : 30, dead: false };
   powerups.push(p);
   return p;
 }
@@ -1434,6 +1428,7 @@ function applyPU(h, p) {
   if (p.type === 'magnet') h.magnetT = 7;
   else if (p.type === 'speed') h.speedT = 6;
   else if (p.type === 'shield') h.shield = Math.max(h.shield, SHIELD_TIME);
+  else if (p.type === 'phantom') h.phantomT = PHANTOM_TIME;
   else for (const o of holes) if (o !== h && o.alive && !(o.shield > 0)) o.frozenT = 3;   // shields block freezes
   burst(p.x, 1.2, p.z, T.color, 30, 6, .45);
   if (state !== 'play') return;
@@ -1444,7 +1439,7 @@ function updatePU(dt, time) {
   puTimer -= dt;
   if (puTimer <= 0 && isPuAuthority()) {
     puTimer = rand(3, 6);
-    if (powerups.length < 12) { const p = spawnPU(); if (net.inGame) netSend('pu', { id: p.id, type: p.type, x: p.x, z: p.z, t: town }); }
+    if (powerups.length < 12) { const p = spawnPU(); if (net.inGame) netSend('pu', { id: p.id, type: p.type, x: p.x, z: p.z, t: town, rareAt: phantomReadyAt }); }
   }
   for (const p of powerups) {
     p.t += dt;
@@ -1559,7 +1554,7 @@ function updatePops(dt) {
 function updateTags() {
   let leader = holes[0]; for (const h of holes) if (h.score > leader.score) leader = h;
   for (const h of holes) {
-    const show = (state === 'play' || state === 'over') && h.alive;
+    const show = (state === 'play' || state === 'over') && h.alive && !(h.phantomT > 0 && !h.isPlayer);
     if (!show) { h.tag.style.display = 'none'; continue; }
     _p.set(h.x, 0, h.z - h.R * 1.15).project(camera);
     if (_p.z > 1) { h.tag.style.display = 'none'; continue; }
@@ -1794,7 +1789,7 @@ function inputDir() {
 function aiThink(h) {
   let fx = 0, fz = 0, threat = 0;
   for (const o of holes) {
-    if (o === h || !o.alive || !canEatHole(o, h)) continue;
+    if (o === h || !o.alive || o.phantomT > 0 || !canEatHole(o, h)) continue;
     const dx = h.x - o.x, dz = h.z - o.z, d = Math.hypot(dx, dz) || 1, danger = o.R * 2.2 + 8;
     if (d < danger) { const w = (danger - d) / danger; fx += dx / d * w; fz += dz / d * w; threat += w; }
   }
@@ -1806,7 +1801,7 @@ function aiThink(h) {
   }
   let best = null, bs = 0, tk = null;
   for (const o of holes) {
-    if (o === h || !o.alive || o.shield > 0 || !canEatHole(h, o)) continue;
+    if (o === h || !o.alive || o.phantomT > 0 || o.shield > 0 || !canEatHole(h, o)) continue;
     const d = Math.hypot(o.x - h.x, o.z - h.z);
     if (d < 30) { const s = (30 + o.growth * .3) / (d + 4); if (s > bs) { bs = s; best = o; tk = 'hole'; } }
   }
@@ -1845,7 +1840,7 @@ function aiDir(h, dt) {
   let tx, tz;
   if (h.mode === 'target') {
     const t = h.target;
-    const bad = h.tk === 'obj' ? t.state !== 'idle' : h.tk === 'hole' ? !t.alive : t.dead;
+    const bad = h.tk === 'obj' ? t.state !== 'idle' : h.tk === 'hole' ? !t.alive || t.phantomT > 0 : t.dead;
     if (bad) { h.aiT = 0; return [0, 0]; }
     tx = t.x; tz = t.z;
   } else { tx = h.wx; tz = h.wz; }
@@ -1972,6 +1967,7 @@ function updateObjects(dt, time) {
 /* ---------------- holes update ---------------- */
 function updateHoles(dt, time) {
   for (const h of holes) {
+    h.phantomT = Math.max(0, h.phantomT - dt);
     if (h.dying) {
       h.dieT += dt;
       const f = clamp(h.dieT / .5, 0, 1);
@@ -2021,8 +2017,15 @@ function holeVsHole() {
     const mp = a.remote || b.remote;   // multiplayer: only the victim's own screen decides it got gulped
     const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz) || .01;
     const aBig = canEatHole(a, b), bBig = canEatHole(b, a);
-    if (aBig && b.shield <= 0 && d < a.R - b.R * .25) { if (!mp) eatHole(a, b); else if (b.isPlayer) netGulpedBy(a); continue; }
-    if (bBig && a.shield <= 0 && d < b.R - a.R * .25) { if (!mp) eatHole(b, a); else if (a.isPlayer) netGulpedBy(b); continue; }
+    if (aBig && bBig) {
+      if (d < Math.min(a.R, b.R) * .8) {
+        const eater = chooseHoleEater(a, b, dx, dz, d), victim = eater === a ? b : a;
+        if (victim.shield <= 0 || eater.phantomT > 0) { if (!mp) eatHole(eater, victim); else if (victim.isPlayer) netGulpedBy(eater); }
+      }
+      continue;
+    }
+    if (aBig && (b.shield <= 0 || a.phantomT > 0) && d < a.R - b.R * .25) { if (!mp) eatHole(a, b); else if (b.isPlayer) netGulpedBy(a); continue; }
+    if (bBig && (a.shield <= 0 || b.phantomT > 0) && d < b.R - a.R * .25) { if (!mp) eatHole(b, a); else if (a.isPlayer) netGulpedBy(b); continue; }
     const minD = (a.R + b.R) * .8;
     if (!aBig && !bBig && d < minD) {
       const p = (minD - d) / (mp ? 1 : 2);
@@ -2034,7 +2037,8 @@ function holeVsHole() {
 function syncHoles(time) {
   for (let i = holes.length; i < HMAX; i++) holeUniform.value[i].set(0, 0, 0, 0);
   holes.forEach((h, i) => {
-    const vis = h.alive || h.dying;
+    const vis = (h.alive || h.dying) && !(h.phantomT > 0 && !h.isPlayer);
+    h.grp.visible = vis;
     if (i < HMAX) holeUniform.value[i].set(h.x, h.z, vis ? h.R : 0, 0);
     if (!vis) return;
     h.grp.position.set(h.x, 0, h.z);
@@ -2124,13 +2128,25 @@ function updateCamera(dt) {
 const stats = { biggest: null, eaten: 0, gulped: 0 };
 const fmtT = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
 // can hole a swallow hole b? Being a whole size bigger always counts, even if the radii are close.
-function canEatHole(a, b) { return a.R > b.R * 1.1 || (a.level > b.level && a.R > b.R * 1.02); }
+function canEatHole(a, b) {
+  if (a.phantomT > 0) return true;
+  if (frenzy) return b.R <= a.R * 3;
+  return a.R > b.R * 1.1 || (a.level > b.level && a.R > b.R * 1.02);
+}
+function chooseHoleEater(a, b, dx, dz, distance) {
+  if ((a.phantomT > 0) !== (b.phantomT > 0)) return a.phantomT > 0 ? a : b;
+  const aApproach = (a.vx * dx + a.vz * dz) / distance;
+  const bApproach = -(b.vx * dx + b.vz * dz) / distance;
+  if (Math.abs(aApproach - bApproach) > .25) return aApproach > bApproach ? a : b;
+  if (a.R !== b.R) return a.R > b.R ? a : b;
+  return (a.pid || a.name) < (b.pid || b.name) ? a : b;
+}
 function updHUD() {
   const P = player, L = LEVELS[P.level], N = LEVELS[P.level + 1];
   $('score').textContent = P.score.toLocaleString();
   $('sizeName').textContent = (net.spec ? `👀 ${P.name} · ` : '') + `SIZE ${P.level + 1} · ${L.name}`;
   $('sizeBar').style.width = (N ? clamp((P.growth - L.need) / (N.need - L.need), 0, 1) * 100 : 100) + '%';
-  $('canEat').textContent = net.spec ? 'Spectating · tap or ← → to switch player' : frenzy ? '🔥 FINAL FRENZY: eat anything!' : 'Can now eat: ' + L.eats;
+  $('canEat').textContent = net.spec ? 'Spectating · tap or ← → to switch player' : P.phantomT > 0 ? '👻 PHANTOM: invisible · eat any player!' : frenzy ? '🔥 EAT ANYTHING · players up to 3× your size' : 'Can now eat: ' + L.eats;
   const pct = Math.floor((1 - objects.length / totalObjs) * 100);
   const classic = gameMode === 'classic';
   const nextPct = town >= TOWNS ? 100 : Math.floor(clamp((P.growth - townNeed(town)) / (townNeed(town + 1) - townNeed(town)), 0, 1) * 100);
@@ -2146,6 +2162,7 @@ function updHUD() {
   }).join('');
   let chips = '';
   if (P.magnetT > 0) chips += `<div class="chip" style="--c:#ff4d4d">🧲 ${P.magnetT.toFixed(1)}</div>`;
+  if (P.phantomT > 0) chips += `<div class="chip" style="--c:#d4b3ff">👻 INVISIBLE + EAT ANYONE ${Math.ceil(P.phantomT)}s</div>`;
   if (P.speedT > 0) chips += `<div class="chip" style="--c:#f5b800">⚡ ${P.speedT.toFixed(1)}</div>`;
   if (P.shield > 0 && !(P.boostT > 0) && !net.spec) chips += `<div class="chip" style="--c:#1fbf63">🛡️ SHIELD ${P.shield.toFixed(1)}</div>`;
   if (P.boostT > 0) chips += `<div class="chip" style="--c:#8a5cff">🛡️ SAFE + 2× SPEED ${P.boostT.toFixed(1)}</div>`;
@@ -2168,7 +2185,7 @@ function drawMini(time) {
     miniG.fillStyle = '#ffd23f'; miniG.fillText('★', M(giantObj.x), M(giantObj.z));
   }
   for (const h of [...holes.filter(o => !o.isPlayer), player]) {
-    if (!h.alive) continue;
+    if (!h.alive || (h.phantomT > 0 && !h.isPlayer)) continue;
     const r = Math.max(h.isPlayer ? 4.5 : 3.5, h.R * k);
     miniG.beginPath(); miniG.arc(M(h.x), M(h.z), r, 0, 7);
     miniG.fillStyle = h.css; miniG.fill();
@@ -2297,7 +2314,7 @@ function isRoomAuthority() {
 function updateClassic() {
   // last ~6% of the city: everything becomes edible and everyone speeds up, so every game can finish
   if (!frenzy && objects.length <= Math.max(25, totalObjs * .06)) {
-    frenzy = true; banner('🔥 FINAL FRENZY! Eat anything, everyone speeds up!', '#ff8bd1', 2.6); sfx.levelUp();
+    frenzy = true; banner('🔥 EAT ANYTHING! Players up to 3× your size!', '#ff8bd1', 2.6); sfx.levelUp();
   }
   if (objects.length === 0) { if (net.inGame && !net.spec) netSend('end', { classic: 1 }); endGame('eaten'); }
 }
@@ -2353,7 +2370,7 @@ function spDefs() {
 
 function startGame(opts = {}) {
   initAudio();
-  releaseControls(); gameT = 0; clk = 0;
+  releaseControls(); gameT = 0; clk = 0; phantomReadyAt = 0;
   townEp = new Array(TOWNS + 1).fill(0); eatenBy = new Map();
   townBorn = new Array(TOWNS + 1).fill(0);
   if (opts.mp) {
@@ -2371,16 +2388,15 @@ function startGame(opts = {}) {
   resetHoles(startsFor(holes.length));
   gameT = 0; clk = 0; refillT = REFILL_TIME; earlyRefillT = 5; puTimer = 3; puSeq = 0; shake = 0; giantFade = 1;
   stats.biggest = null; stats.eaten = 0; stats.gulped = 0;
-  killsLeft = KILLS; killsBy = new Map(); toggleKillPanel(false);
   camBase.set(player.x, 30, player.z + 30); camLook.set(player.x, 0, player.z);
   state = 'play';
-  only('hud', 'quit', 'dash'); $('quit').textContent = '🏁 END'; updKillBtn(); dashT = 0; dashCd = 0;
+  only('hud', 'quit', 'dash'); $('quit').textContent = '🏁 END'; dashT = 0; dashCd = 0;
   updHUD(); drawMini(0);
   banner(gameMode === 'classic' ? 'GULP THE WHOLE CITY!' : `🏙️ TOWN 1 of ${TOWNS} — GULP!`, '#ffe66d', 1.6); sfx.start();
 }
 function endGame(reason, winnerName) {
   if (state !== 'play') return;
-  state = 'over'; overLock = true; toggleKillPanel(false);
+  state = 'over'; overLock = true;
   touch.active = false; $('joy').classList.add('hidden');
   sfx.end();
   if (reason !== 'quit') lastGame = null;   // finished games can't be spectated
@@ -2456,7 +2472,7 @@ function updDash(dt) {
 $('dash').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); doDash(); });
 
 /* ---------------- problem log (see the script in <head>) ---------------- */
-const VERSION = '2026-11-23b';
+const VERSION = '2026-11-23c';
 window.__gcStarted = true;
 window.__gcCtx = () => ({
   player: localStorage.getItem('gulpcity_name') || '(no name)',
@@ -2503,71 +2519,9 @@ $('bugShare').addEventListener('click', async () => {
 });
 updBugBtn();
 
-/* ---------------- kill button ----------------
-   3 kills per game: tap 💀, tap a name, they're gone (they respawn shortly after, like being gulped). */
-const KILLS = 3;
-let killsLeft = KILLS, killsBy = new Map();
-const holeDead = h => h.remote ? !h.netAlive : !h.alive;
-function updKillBtn() {
-  $('killBtn').textContent = killsLeft > 0 ? `💀 KILL ×${killsLeft}` : '💀 NO KILLS LEFT';
-  $('killBtn').disabled = killsLeft <= 0;
-  $('killBtn').classList.toggle('hidden', !!net.spec);
-}
-function renderKillList() {
-  const others = holes.filter(h => !h.isPlayer);
-  $('killList').innerHTML = others.length ? others.map((h, i) => {
-    const dead = holeDead(h), shielded = !dead && h.shield > 0;
-    return `<button class="kname" data-i="${i}" ${dead ? 'disabled' : ''}><span class="dot" style="background:${h.css}"></span>` +
-      `${h.name.replace(/[<>&]/g, '')}<small>${dead ? '💀 dead' : shielded ? '🛡️ protected' : gameMode === 'classic' ? '' : '🏙' + townOf(h)}</small></button>`;
-  }).join('') : '<div style="padding:6px">Nobody else is here!</div>';
-  $('killList').onclick = e => {
-    const b = e.target.closest('.kname'); if (!b) return;
-    doKill(others[+b.dataset.i]);
-  };
-}
-function toggleKillPanel(open = $('killPanel').classList.contains('hidden')) {
-  if (open && (killsLeft <= 0 || state !== 'play' || net.spec)) open = false;
-  $('killPanel').classList.toggle('hidden', !open);
-  if (open) renderKillList();
-}
-function doKill(h) {
-  if (!h || h.isPlayer || killsLeft <= 0 || state !== 'play' || net.spec || !holes.includes(h)) return;
-  if (holeDead(h)) { banner(`${h.name} is already dead!`, '#ffb3b3', 1.2); renderKillList(); return; }
-  if (h.shield > 0) { banner(`🛡️ ${h.name} is protected right now!`, '#9be7ff', 1.4); renderKillList(); return; }
-  killsLeft--;
-  if (h.remote) {
-    netSend('kill', { t: h.pid });
-    // they die on their own screen and tell everyone (or tell us it was blocked)
-  } else killHole(h, 'YOU');
-  banner(h.remote ? `💀 Kill sent to ${h.name}! (${killsLeft} left)` : `💀 You killed ${h.name}! (${killsLeft} left)`, '#ff6b6b', 1.8);
-  sfx.holeEat(); shake = Math.max(shake, .6);
-  updKillBtn(); toggleKillPanel(false);
-}
-// multiplayer: the target hears about it and kills itself (only 3 per attacker are accepted)
-function onKill(d, { peerId }) {
-  if (!d || d.t !== net.myId || net.spec || state !== 'play' || !player.alive) return;
-  if (player.shield > 0) { netSend('kblock', {}, peerId); banner('🛡️ YOUR SHIELD BLOCKED A KILL!', '#3dff8c', 1.6); return; }
-  const n = killsBy.get(peerId) || 0; if (n >= KILLS) return;
-  killsBy.set(peerId, n + 1);
-  const k = holeByPid(peerId);
-  killHole(player, k ? k.name : 'someone');
-  player.lv++;
-  netSend('died', { lv: player.lv, by: peerId });
-  netState();
-}
-function onDied(d, { peerId }) {
-  const v = holeByPid(peerId); if (!v || !d) return;
-  v.lv = Math.max(v.lv, d.lv | 0); v.netAlive = false;
-  const killer = d.by === net.myId ? 'YOU' : (holeByPid(d.by) || {}).name || 'someone';
-  if (v.alive) killHole(v, killer);
-  if (killer !== 'YOU') banner(`💀 ${v.name} was killed by ${killer}`, '#ffb3b3', 1.4);
-}
-$('killBtn').addEventListener('click', e => { e.stopPropagation(); toggleKillPanel(); });
-$('killClose').addEventListener('click', e => { e.stopPropagation(); toggleKillPanel(false); });
-
 /* ---------------- multiplayer ----------------
    Game messages travel over secure WebSockets through internet relays, so routers do not need to allow WebRTC.
-   - "lobby-v2" room: hosts advertise open games; seekers get asked "Join X's game?"
+   - "lobby-v3" room: hosts advertise open games; seekers get asked "Join X's game?"
    - "g-<code>" room: one game, up to 20 players. Host owns the roster and presses START.
    In-game each player is the authority for its own hole: it streams its position/size and what it ate. */
 const MQTT_URL = 'https://cdn.jsdelivr.net/npm/mqtt@5.10.4/dist/mqtt.esm.js';
@@ -2587,10 +2541,10 @@ function joinRelayRoom(config, roomId) {
   let resolveReady, rejectReady, heartbeat, connectTimer, wasOffline = false;
   const ready = new Promise((resolve, reject) => { resolveReady = resolve; rejectReady = reject; });
   // Room codes isolate games on the shared brokers; encrypt their contents with a room-specific key.
-  const roomSeed = config.appId + '/relay-v2/' + roomId;
+  const roomSeed = config.appId + '/relay-v3/' + roomId;
   const keyReady = Promise.all(['route/', 'data/'].map(domain =>
     crypto.subtle.digest('SHA-256', encoder.encode(domain + roomSeed)))).then(async ([routeHash, keyHash]) => ({
-    topic: 'gulpcity/v2/' + Array.from(new Uint8Array(routeHash), b => b.toString(16).padStart(2, '0')).join(''),
+    topic: 'gulpcity/v3/' + Array.from(new Uint8Array(routeHash), b => b.toString(16).padStart(2, '0')).join(''),
     key: await crypto.subtle.importKey('raw', keyHash, 'AES-GCM', false, ['encrypt', 'decrypt'])
   }));
   const online = () => clients.filter(c => c.live && c.client.connected);
@@ -2698,7 +2652,7 @@ function joinRelayRoom(config, roomId) {
 }
 const MAXP = 20;
 // ?lobby=xyz in the URL uses a separate private lobby (for testing without pulling in real players)
-const LOBBY_ROOM = 'lobby-v2' + ((new URLSearchParams(location.search).get('lobby') || '').replace(/[^a-z0-9]/gi, '').slice(0, 16).replace(/^(.)/, '-$1'));
+const LOBBY_ROOM = 'lobby-v3' + ((new URLSearchParams(location.search).get('lobby') || '').replace(/[^a-z0-9]/gi, '').slice(0, 16).replace(/^(.)/, '-$1'));
 const net = { lib: null, lobby: null, room: null, myId: null, inGame: false, isHost: false, started: false, myCode: null, gameCode: null,
   name: 'Player', hostName: '', ads: new Map(), declined: new Set(), roster: [], hostPeer: null, prompt: null,
   adTimer: 0, seekTimer: 0, A: {}, LA: {}, stT: 0, eaten: [], createdAt: 0, gen: 0, spec: null, snap: null };
@@ -2864,14 +2818,7 @@ async function joinGameRoom(code, host, hostName) {
   renderLobby();
 }
 function wireRoom(room, code) {
-  for (const n of ['hi', 'roster', 'full', 'start', 'st', 'ate', 'gulp', 'pu', 'pick', 'end', 'snap', 'refill', 'col', 'kill', 'died', 'mode', 'kblock']) net.A[n] = room.makeAction(n);
-  net.A.kill.onMessage(onKill);
-  net.A.died.onMessage(onDied);
-  net.A.kblock.onMessage((d, { peerId }) => {
-    const h = holeByPid(peerId);
-    if (state === 'play' && killsLeft < KILLS) { killsLeft++; updKillBtn(); }
-    banner(`🛡️ ${h ? h.name : 'They'} blocked your kill! (refunded)`, '#3dff8c', 1.8);
-  });
+  for (const n of ['hi', 'roster', 'full', 'start', 'st', 'ate', 'gulp', 'pu', 'pick', 'end', 'snap', 'refill', 'col', 'mode']) net.A[n] = room.makeAction(n);
   net.A.hi.onMessage((d, { peerId }) => onHi(d, peerId));
   net.A.snap.onMessage(d => onSnap(d));
   net.A.roster.onMessage((d, { peerId }) => { if (peerId === net.hostPeer && Array.isArray(d)) { net.roster = d; renderLobby(); } });
@@ -2883,7 +2830,11 @@ function wireRoom(room, code) {
     if (h && d) onEaten(d, h);
   });
   net.A.gulp.onMessage(onGulp);
-  net.A.pu.onMessage(d => { if (net.inGame && d && d.t === town && !powerups.some(p => p.id === d.id)) spawnPU(d.type, d.x, d.z, d.id); });
+  net.A.pu.onMessage(d => {
+    if (!net.inGame || !d) return;
+    if (Number.isFinite(d.rareAt)) phantomReadyAt = Math.max(phantomReadyAt, d.rareAt);
+    if (d.t === town && !powerups.some(p => p.id === d.id)) spawnPU(d.type, d.x, d.z, d.id);
+  });
   net.A.refill.onMessage(d => { if (!net.inGame || !d) return; const born = Number.isFinite(d.born) ? d.born : clk;
     if (d.eps) applyRefills(d.eps, born); else if (d.t >= 1 && d.t <= TOWNS) refillTown(d.t, d.ep | 0, born); });
   net.A.col.onMessage((d, { peerId }) => {   // a guest asks the host for a colour
@@ -3011,7 +2962,7 @@ function netState() {
   // Eating must arrive even when a newer movement packet overtakes an older one.
   if (net.eaten.length) netSend('ate', { t: town, ep: townEp[town], born: townBorn[town], e: net.eaten.splice(0) });
   netSend('st', { p: [r2(p.x), r2(p.z), r2(p.vx), r2(p.vz), r2(p.R), p.growth, p.level, p.score], f, lv: p.lv, a: p.alive ? 1 : 0,
-    t: town, ep: townEp[town], born: townBorn[town], b: busAuthority() === net.myId ? busState() : undefined });
+    t: town, ep: townEp[town], born: townBorn[town], gh: r2(p.phantomT), rareAt: phantomReadyAt, b: busAuthority() === net.myId ? busState() : undefined });
 }
 function onState(d, { peerId }) {
   const h = holeByPid(peerId);
@@ -3019,6 +2970,8 @@ function onState(d, { peerId }) {
   const [x, z, vx, vz, R, growth, level, score] = d.p;
   h.nx = x; h.nz = z; h.nvx = vx; h.nvz = vz; h.nR = R; h.growth = growth; h.level = level; h.score = score; h.lv = d.lv;
   h.netT = performance.now();
+  h.phantomT = Number.isFinite(d.gh) ? clamp(d.gh, 0, PHANTOM_TIME) : 0;
+  if (Number.isFinite(d.rareAt)) phantomReadyAt = Math.max(phantomReadyAt, d.rareAt);
   h.frozenT = d.f & 1 ? .3 : 0; h.speedT = d.f & 2 ? .3 : 0; h.magnetT = d.f & 4 ? .3 : 0; h.shield = d.f & 8 ? .3 : 0;
   const t = clamp(d.t | 0, 0, TOWNS), ep = d.ep | 0;
   h.town = t; h.netAlive = !!d.a;
@@ -3064,6 +3017,7 @@ function onPick(d, { peerId }) {
   const p = powerups.find(q => q.id === d.id);
   if (p && !p.dead) { p.dead = true; burst(p.x, 1.2, p.z, PU[p.type].color, 30, 6, .45); }
   const h = holeByPid(peerId);
+  if (d.type === 'phantom' && h) h.phantomT = PHANTOM_TIME;
   if (d.type === 'freeze' && d.t === town && !net.spec && player.alive && state === 'play' && player.shield > 0) {
     banner('🛡️ FREEZE BLOCKED!', '#3dff8c', 1.3); return;
   }
@@ -3075,9 +3029,9 @@ function onPick(d, { peerId }) {
 function makeSnap() {
   const eaten = {};
   for (const [k, set] of eatenBy) eaten[k] = [...set];
-  return { seed: baseSeed, clk, gameT, townEp, townBorn, eaten, refillT, mode: gameMode, frenzy, buses: busState(),
+  return { seed: baseSeed, clk, gameT, townEp, townBorn, eaten, refillT, mode: gameMode, frenzy, phantomReadyAt, buses: busState(),
     holes: holes.map(h => ({ pid: h.isPlayer ? net.myId : h.pid, name: h.name, c: h.baseColor.getHex(), x: r2(h.isPlayer ? h.x : h.nx), z: r2(h.isPlayer ? h.z : h.nz),
-      R: r2(h.R), level: h.level, score: h.score, growth: h.growth, alive: (h.isPlayer ? h.alive : h.netAlive) ? 1 : 0, lv: h.lv, t: townOf(h) })),
+      R: r2(h.R), level: h.level, score: h.score, growth: h.growth, phantomT: h.phantomT, alive: (h.isPlayer ? h.alive : h.netAlive) ? 1 : 0, lv: h.lv, t: townOf(h) })),
     pus: powerups.filter(p => !p.dead).map(p => ({ id: p.id, type: p.type, x: p.x, z: p.z })) };
 }
 async function trySpectate(lg) {
@@ -3111,6 +3065,7 @@ function beginSpectate(d) {
   baseSeed = d.seed >>> 0; gameMode = d.mode === 'classic' ? 'classic' : 'towns'; frenzy = !!d.frenzy;
   townEp = Array.isArray(d.townEp) ? d.townEp.slice(0, TOWNS + 1).map(v => v | 0) : new Array(TOWNS + 1).fill(0);
   townBorn = Array.from({ length: TOWNS + 1 }, (_, t) => Number.isFinite(d.townBorn?.[t]) ? d.townBorn[t] : 0);
+  phantomReadyAt = Number.isFinite(d.phantomReadyAt) ? d.phantomReadyAt : 0;
   while (townEp.length < TOWNS + 1) townEp.push(0);
   eatenBy = new Map(); for (const k in d.eaten || {}) eatenBy.set(k, new Set(d.eaten[k]));
   setHoles(d.holes.map(p => ({ name: p.name, color: p.c, remote: true, pid: p.pid })));
@@ -3119,6 +3074,7 @@ function beginSpectate(d) {
     const p = d.holes[i];
     h.x = h.nx = p.x; h.z = h.nz = p.z; h.R = h.nR = p.R; h.level = p.level; h.score = p.score; h.growth = p.growth; h.lv = p.lv;
     h.town = clamp(p.t | 0, 0, TOWNS); h.netAlive = !!p.alive; h.netT = now;
+    h.phantomT = Number.isFinite(p.phantomT) ? clamp(p.phantomT, 0, PHANTOM_TIME) : 0;
   });
   clk = d.clk || 0; gameT = d.gameT || 0; refillT = d.refillT || REFILL_TIME;
   player = holes.find(h => h.netAlive) || holes[0];
@@ -3126,7 +3082,7 @@ function beginSpectate(d) {
   loadTown(player.town);
   applyBusState(d.buses);
   camBase.set(player.x, 30, player.z + 30); camLook.set(player.x, 0, player.z);
-  only('hud', 'quit'); toggleKillPanel(false); updKillBtn();
+  only('hud', 'quit');
   $('quit').textContent = '🚪 LEAVE';
   updHUD(); drawMini(0);
   banner(`👀 SPECTATING ${player.name}`, '#9be7ff', 2);
@@ -3249,7 +3205,7 @@ function frame() {
   updatePops(dt);
   updateTags();
   hudT -= dt;
-  if (state === 'play' && hudT <= 0) { hudT = .15; updHUD(); if (!$('killPanel').classList.contains('hidden') && Math.random() < .2) renderKillList(); }
+  if (state === 'play' && hudT <= 0) { hudT = .15; updHUD(); }
   miniT -= dt;
   if (state === 'play' && miniT <= 0) { miniT = .2; drawMini(time); }
   renderer.render(scene, camera);
