@@ -246,6 +246,7 @@ canvas{display:block;touch-action:none}
     <div id="mpNameRow" style="display:flex;flex-direction:column;gap:12px;align-items:center">
       <div>Your name:</div>
       <input id="mpName" maxlength="14" autocomplete="off" spellcheck="false">
+      <div style="font-size:14px;opacity:.85">Play online with friends, even in different houses.<br>Share your game code so they can join.</div>
       <button id="mpGo" class="btn small">🔎 FIND A GAME</button>
       <div class="or">— or join a friend —</div>
       <input id="mpCodeIn" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="CODE">
@@ -1610,8 +1611,22 @@ for (const ev of ['pointerup', 'touchend', 'keydown']) addEventListener(ev, () =
 document.addEventListener('visibilitychange', () => { if (actx) document.hidden ? actx.suspend() : actx.resume(); });
 
 /* ---------------- input ---------------- */
+// Safari can ignore the viewport zoom setting. Stop its native zoom gestures during play.
+const blockGameZoom = e => { if (state === 'play') e.preventDefault(); };
+for (const type of ['gesturestart', 'gesturechange', 'gestureend'])
+  document.addEventListener(type, blockGameZoom, { passive: false });
+document.addEventListener('touchmove', e => {
+  if (e.touches.length > 1) blockGameZoom(e);
+}, { passive: false });
+document.addEventListener('wheel', e => {
+  if (e.ctrlKey || e.metaKey) blockGameZoom(e);
+}, { passive: false });
+document.addEventListener('dblclick', blockGameZoom, { passive: false });
 const keys = {};
 addEventListener('keydown', e => {
+  if (state === 'play' && (e.ctrlKey || e.metaKey) && ['+', '-', '=', '0', '_'].includes(e.key)) {
+    e.preventDefault(); return;
+  }
   if (e.target && e.target.tagName === 'INPUT') { if (e.code === 'Enter') $(e.target.id === 'mpCodeIn' ? 'mpCodeGo' : 'mpGo').click(); return; }
   keys[e.code] = true;
   if (e.code === 'KeyM') toggleMute();
@@ -1626,6 +1641,7 @@ addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
 const touch = { active: false, id: null, sx: 0, sy: 0, x: 0, y: 0 };
 canvas.addEventListener('pointerdown', e => {
   if (state !== 'play') return;
+  if (touch.active || !e.isPrimary) return;
   if (net.spec) { followNext(); return; }
   touch.active = true; touch.id = e.pointerId; touch.sx = touch.x = e.clientX; touch.sy = touch.y = e.clientY;
   $('joy').classList.remove('hidden'); updJoy();
@@ -2315,7 +2331,7 @@ function updDash(dt) {
 $('dash').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); doDash(); });
 
 /* ---------------- problem log (see the script in <head>) ---------------- */
-const VERSION = '2026-11-22f';
+const VERSION = '2026-11-23a';
 window.__gcStarted = true;
 window.__gcCtx = () => ({
   player: localStorage.getItem('gulpcity_name') || '(no name)',
@@ -2425,15 +2441,139 @@ $('killBtn').addEventListener('click', e => { e.stopPropagation(); toggleKillPan
 $('killClose').addEventListener('click', e => { e.stopPropagation(); toggleKillPanel(false); });
 
 /* ---------------- multiplayer ----------------
-   Peer-to-peer over WebRTC using Trystero (public relays only help players find each other; game data goes browser to browser).
-   - "lobby-v1" room: hosts advertise open games; seekers get asked "Join X's game?"
+   Game messages travel over secure WebSockets through internet relays, so routers do not need to allow WebRTC.
+   - "lobby-v2" room: hosts advertise open games; seekers get asked "Join X's game?"
    - "g-<code>" room: one game, up to 20 players. Host owns the roster and presses START.
    In-game each player is the authority for its own hole: it streams its position/size and what it ate. */
-const TRYSTERO_URL = 'https://cdn.jsdelivr.net/npm/trystero@0.27.0/+esm';
-const NET_CFG = { appId: 'ty-robb.github.io/gulp-city', identity: 'none' };
+const MQTT_URL = 'https://cdn.jsdelivr.net/npm/mqtt@5.10.4/dist/mqtt.esm.js';
+const RELAY_URLS = ['wss://test.mosquitto.org:8081/mqtt', 'wss://broker.emqx.io:8084/mqtt'];
+const NET_CFG = { appId: 'ty-robb.github.io/gulp-city' };
+const relayId = crypto.randomUUID().replace(/-/g, '');
+let mqttLib;
+async function loadMultiplayer() {
+  if (!mqttLib) mqttLib = (await import(MQTT_URL)).default;
+  return { joinRoom: joinRelayRoom };
+}
+// One room uses both relays. Message IDs remove duplicates, and each broker can carry the game by itself.
+function joinRelayRoom(config, roomId) {
+  const clients = [], peers = new Map(), actions = new Map(), seen = new Map(), latestState = new Map();
+  const encoder = new TextEncoder(), decoder = new TextDecoder();
+  let closed = false, seq = 0, joined = () => {}, left = () => {}, error = () => {}, hadConnection = false;
+  let resolveReady, rejectReady, heartbeat, connectTimer, wasOffline = false;
+  const ready = new Promise((resolve, reject) => { resolveReady = resolve; rejectReady = reject; });
+  // Room codes isolate games on the shared brokers; encrypt their contents with a room-specific key.
+  const roomSeed = config.appId + '/relay-v2/' + roomId;
+  const keyReady = Promise.all(['route/', 'data/'].map(domain =>
+    crypto.subtle.digest('SHA-256', encoder.encode(domain + roomSeed)))).then(async ([routeHash, keyHash]) => ({
+    topic: 'gulpcity/v2/' + Array.from(new Uint8Array(routeHash), b => b.toString(16).padStart(2, '0')).join(''),
+    key: await crypto.subtle.importKey('raw', keyHash, 'AES-GCM', false, ['encrypt', 'decrypt'])
+  }));
+  const online = () => clients.filter(c => c.live && c.client.connected);
+  let sendChain = Promise.resolve(), receiveChain = Promise.resolve();
+  function send(action, data, target) {
+    if (closed || !online().length) return Promise.reject(new Error('Internet relay disconnected'));
+    const message = { p: relayId, s: ++seq, a: action, d: data, to: target || null };
+    const task = sendChain.then(async () => {
+      const { key, topic } = await keyReady;
+      if (closed) return;
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const encrypted = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, encoder.encode(JSON.stringify(message))));
+      const packet = new Uint8Array(12 + encrypted.length); packet.set(iv); packet.set(encrypted, 12);
+      // Never queue old movement while offline. Control messages use MQTT acknowledgements.
+      const qos = ['st', 'ad', '$hello'].includes(action) ? 0 : 1;
+      for (const c of online()) c.client.publish(topic, packet, { qos, retain: false });
+    });
+    sendChain = task.catch(() => {});
+    return task;
+  }
+  function forget(id) { if (peers.delete(id)) { latestState.delete(id); left({ peerId: id }); } }
+  async function receive(payload) {
+    if (closed || payload.length < 29 || payload.length > 262144) return;
+    let m;
+    try {
+      const { key } = await keyReady;
+      const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: payload.subarray(0, 12) }, key, payload.subarray(12));
+      m = JSON.parse(decoder.decode(plain));
+    } catch { return; }
+    if (closed || !m || typeof m.p !== 'string' || !/^[a-f0-9]{32}$/.test(m.p) || m.p === relayId ||
+        !Number.isSafeInteger(m.s) || m.s < 1 || typeof m.a !== 'string' || (m.to && m.to !== relayId)) return;
+    const id = m.p + ':' + m.s;
+    if (seen.has(id)) return;
+    seen.set(id, performance.now());
+    if (m.a === '$bye') { forget(m.p); return; }
+    const fresh = !peers.has(m.p);
+    peers.set(m.p, performance.now());
+    if (fresh) { joined({ peerId: m.p }); send('$hello', null, m.p).catch(() => {}); }
+    if (m.a === '$hello') return;
+    if (m.a === 'st') {
+      if (m.s <= (latestState.get(m.p) || 0)) return;
+      latestState.set(m.p, m.s);
+    }
+    const fn = actions.get(m.a);
+    if (fn) fn(m.d, { peerId: m.p });
+  }
+  const room = {
+    getSelf: () => ready.then(() => ({ peerId: relayId })),
+    isConnected: () => !closed && online().length > 0,
+    makeAction: name => ({ send: (data, options) => send(name, data, options && options.target), onMessage: fn => actions.set(name, fn) }),
+    onPeerJoin(fn) { joined = fn; for (const id of peers.keys()) fn({ peerId: id }); },
+    onPeerLeave(fn) { left = fn; },
+    onError(fn) { error = fn; },
+    async leave() {
+      if (closed) return;
+      await send('$bye', null).catch(() => {});
+      closed = true; clearInterval(heartbeat); clearTimeout(connectTimer);
+      rejectReady(new Error('Room closed'));
+      for (const c of clients) {
+        const forceClose = setTimeout(() => c.client.end(true), 1500);
+        c.client.end(false, {}, () => clearTimeout(forceClose));
+      }
+      peers.clear(); actions.clear();
+    }
+  };
+  connectTimer = setTimeout(() => {
+    if (!hadConnection && !closed) { rejectReady(new Error('Could not reach an internet relay')); room.leave(); }
+  }, 12000);
+  keyReady.then(({ topic }) => {
+    if (closed) return;
+    for (const url of RELAY_URLS) {
+      let client;
+      try {
+        client = mqttLib.connect(url, { clientId: 'gc' + crypto.randomUUID().replace(/-/g, '').slice(0, 20), clean: true,
+          connectTimeout: 7000, reconnectPeriod: 3000, keepalive: 20, queueQoSZero: false, resubscribe: false });
+      } catch { continue; }
+      const c = { client, live: false }; clients.push(c);
+      client.on('connect', () => client.subscribe(topic, { qos: 1 }, (err, grants) => {
+        if (closed || err || !grants || grants.some(g => g.qos > 1)) return;
+        c.live = true; hadConnection = true; clearTimeout(connectTimer); resolveReady();
+        if (wasOffline) { wasOffline = false; error({ code: 'relay-online', message: 'Internet connection restored' }); }
+        send('$hello', null).catch(() => {});
+      }));
+      client.on('message', (t, payload) => {
+        if (t !== topic || closed) return;
+        receiveChain = receiveChain.then(() => receive(payload)).catch(e => window.__gcLog('net', 'Relay message: ' + e.message));
+      });
+      client.on('close', () => {
+        c.live = false;
+        if (!closed && hadConnection && !online().length && !wasOffline) {
+          wasOffline = true; error({ code: 'relay-offline', message: 'Internet connection lost; reconnecting' });
+        }
+      });
+      client.on('error', () => {}); // connection failures retry; the room reports loss of all relays above
+    }
+    heartbeat = setInterval(() => {
+      if (closed) return;
+      send('$hello', null).catch(() => {});
+      const now = performance.now();
+      for (const [id, time] of peers) if (now - time > 25000) forget(id);
+      for (const [id, time] of seen) if (now - time > 30000) seen.delete(id);
+    }, 3000);
+  }).catch(e => { rejectReady(e); room.leave(); });
+  return room;
+}
 const MAXP = 20;
 // ?lobby=xyz in the URL uses a separate private lobby (for testing without pulling in real players)
-const LOBBY_ROOM = 'lobby-v1' + ((new URLSearchParams(location.search).get('lobby') || '').replace(/[^a-z0-9]/gi, '').slice(0, 16).replace(/^(.)/, '-$1'));
+const LOBBY_ROOM = 'lobby-v2' + ((new URLSearchParams(location.search).get('lobby') || '').replace(/[^a-z0-9]/gi, '').slice(0, 16).replace(/^(.)/, '-$1'));
 const net = { lib: null, lobby: null, room: null, myId: null, inGame: false, isHost: false, started: false, myCode: null, gameCode: null,
   name: 'Player', hostName: '', ads: new Map(), declined: new Set(), roster: [], hostPeer: null, prompt: null,
   adTimer: 0, seekTimer: 0, A: {}, LA: {}, stT: 0, eaten: [], createdAt: 0, gen: 0, spec: null, snap: null };
@@ -2482,7 +2622,7 @@ async function mpFind() {
   localStorage.setItem('gulpcity_name', name); net.name = name;
   mpShow('search'); setStatus('<span class="spin">🌀</span> Connecting…');
   const g = ++net.gen;
-  try { net.lib = net.lib || await import(TRYSTERO_URL); }
+  try { net.lib = net.lib || await loadMultiplayer(); }
   catch (e) { window.__gcLog('net', 'Multiplayer library failed to load: ' + (e && e.message)); if (g === net.gen) setStatus('❌ Couldn\'t load multiplayer. Check your internet and try again.'); return; }
   if (g !== net.gen) return;
   const lobby = net.lib.joinRoom(NET_CFG, LOBBY_ROOM);
@@ -2500,6 +2640,12 @@ async function mpFind() {
     const now = performance.now();
     for (const [k, a] of net.ads) if (now - a.seen > 8000) net.ads.delete(k);
   }, 2000);
+  try { await lobby.getSelf(); }
+  catch (e) {
+    if (g === net.gen) { leaveLobby(); mpShow('name'); setStatus('Could not connect online. Check your internet and try again.'); }
+    return;
+  }
+  if (g !== net.gen) return;
   searching();
   if (lastGame) trySpectate(lastGame);
 }
@@ -2550,7 +2696,7 @@ async function mpJoinCode() {
   localStorage.setItem('gulpcity_name', name); net.name = name;
   mpShow('search'); setStatus(`<span class="spin">🌀</span> Looking for game ${code}…`);
   const g = ++net.gen;
-  try { net.lib = net.lib || await import(TRYSTERO_URL); }
+  try { net.lib = net.lib || await loadMultiplayer(); }
   catch (e) { window.__gcLog('net', 'Multiplayer library failed to load: ' + (e && e.message)); if (g === net.gen) { mpShow('name'); setStatus('❌ Couldn\'t load multiplayer. Check your internet and try again.'); } return; }
   if (g !== net.gen) return;
   net.byCode = true;
@@ -2579,7 +2725,12 @@ async function joinGameRoom(code, host, hostName) {
   mpShow('lobby'); $('mpPlayers').innerHTML = '';
   setStatus('<span class="spin">🌀</span> Connecting…');
   let self;
-  try { self = await room.getSelf(); } catch (e) { if (g === net.gen) searching('Couldn\'t connect — still looking…'); return; }
+  try { self = await room.getSelf(); } catch (e) {
+    if (g === net.gen && net.room === room) {
+      leaveGameRoom(); mpShow('name'); setStatus('Could not connect online. Check your internet and try again.');
+    }
+    return;
+  }
   if (g !== net.gen || net.room !== room) return;
   net.myId = self.peerId;
   wireRoom(room, code);
@@ -2588,7 +2739,7 @@ async function joinGameRoom(code, host, hostName) {
   renderLobby();
 }
 function wireRoom(room, code) {
-  for (const n of ['hi', 'roster', 'full', 'start', 'st', 'gulp', 'pu', 'pick', 'end', 'snap', 'refill', 'col', 'kill', 'died', 'mode', 'kblock']) net.A[n] = room.makeAction(n);
+  for (const n of ['hi', 'roster', 'full', 'start', 'st', 'ate', 'gulp', 'pu', 'pick', 'end', 'snap', 'refill', 'col', 'kill', 'died', 'mode', 'kblock']) net.A[n] = room.makeAction(n);
   net.A.kill.onMessage(onKill);
   net.A.died.onMessage(onDied);
   net.A.kblock.onMessage((d, { peerId }) => {
@@ -2602,6 +2753,10 @@ function wireRoom(room, code) {
   net.A.full.onMessage((d, { peerId }) => { if (peerId === net.hostPeer && state === 'lobby') kicked(code, 'That game is full — still looking…'); });
   net.A.start.onMessage((d, { peerId }) => { if (peerId === net.hostPeer && state === 'lobby') beginMP(d); });
   net.A.st.onMessage(onState);
+  net.A.ate.onMessage((d, { peerId }) => {
+    const h = holeByPid(peerId);
+    if (h && d) onEaten(d, h);
+  });
   net.A.gulp.onMessage(onGulp);
   net.A.pu.onMessage(d => { if (net.inGame && d && d.t === town && !powerups.some(p => p.id === d.id)) spawnPU(d.type, d.x, d.z, d.id); });
   net.A.refill.onMessage(d => { if (!net.inGame || !d) return; if (d.eps) applyRefills(d.eps); else if (d.t >= 1 && d.t <= TOWNS) refillTown(d.t, d.ep | 0); });
@@ -2619,6 +2774,13 @@ function wireRoom(room, code) {
   room.onPeerJoin(({ peerId }) => net.A.hi && net.A.hi.send({ name: net.name, host: net.isHost, spec: !!net.spec, c: myColor }, { target: peerId }).catch(() => {}));
   room.onPeerLeave(({ peerId }) => onLeave(peerId));
   room.onError(e => {
+    if (e.code === 'relay-online' || e.code === 'relay-offline') {
+      if (net.inGame) banner(e.code === 'relay-online' ? '🌐 BACK ONLINE' : '🌐 CONNECTION LOST — RECONNECTING…', '#9be7ff', 3);
+      else if (state === 'lobby') {
+        if (e.code === 'relay-online') renderLobby(); else setStatus('Connection lost — reconnecting to the internet…');
+      }
+      if (e.code === 'relay-online') return;
+    }
     if (e.code !== 'room-full') window.__gcLog('net', e.code + ': ' + (e.message || '')); if (e.code === 'room-full' && state === 'lobby' && !net.isHost && !net.spec) kicked(code, 'That game is full — still looking…'); });
 }
 function kicked(code, msg) {
@@ -2683,7 +2845,7 @@ function pickLobbyColor(i) {
 function renderLobby() {
   if (state !== 'lobby' || !net.room || net.spec) return;
   $('mpTitle').textContent = `${net.isHost ? 'YOUR' : (net.hostName || 'THEIR').toUpperCase() + "'S"} GAME · ${net.roster.length}/${MAXP}`;
-  $('mpCode').innerHTML = `CODE: <b>${net.gameCode}</b><small>friends can type this to join · tap to copy</small>`;
+  $('mpCode').innerHTML = `CODE: <b>${net.gameCode}</b><small>🌐 ONLINE · friends anywhere can join · tap to copy</small>`;
   const mine = net.roster.find(p => p.id === net.myId);
   const taken = new Set(net.roster.filter(p => p.id !== net.myId).map(p => p.c));
   renderSwatches($('mpColors'), mine ? mine.c : myColor, taken, pickLobbyColor);
@@ -2713,14 +2875,17 @@ function beginMP(d) {
 // ---- in-game messages ----
 function netTick(dt) {
   net.stT -= dt;
-  if (net.stT <= 0) { net.stT = .08; netState(); }
+  if (net.stT <= 0) { net.stT = .2; netState(); }
 }
 const r2 = v => Math.round(v * 100) / 100;
 function netState() {
+  if (!net.room || !net.room.isConnected()) return;
   const p = player;
   const f = (p.frozenT > 0 ? 1 : 0) | (p.speedT > 0 || p.boostT > 0 || dashT > 0 ? 2 : 0) | (p.magnetT > 0 ? 4 : 0) | (p.shield > 0 ? 8 : 0);
+  // Eating must arrive even when a newer movement packet overtakes an older one.
+  if (net.eaten.length) netSend('ate', { t: town, ep: townEp[town], e: net.eaten.splice(0) });
   netSend('st', { p: [r2(p.x), r2(p.z), r2(p.vx), r2(p.vz), r2(p.R), p.growth, p.level, p.score], f, lv: p.lv, a: p.alive ? 1 : 0,
-    t: town, ep: townEp[town], e: net.eaten.splice(0) });
+    t: town, ep: townEp[town] });
 }
 function onState(d, { peerId }) {
   const h = holeByPid(peerId);
@@ -2737,6 +2902,10 @@ function onState(d, { peerId }) {
   if (here && !h.alive && !h.dying) {
     h.alive = true; h.x = x; h.z = z; h.R = R; h.grp.visible = true; ringFX(x, z, 1, h.baseColor);
   } else if (!here && h.alive) { h.alive = false; h.grp.visible = false; }
+}
+function onEaten(d, h) {
+  const t = clamp(d.t | 0, 0, TOWNS), ep = d.ep | 0;
+  if (ep > townEp[t]) refillTown(t, ep);
   if (!Array.isArray(d.e) || ep < townEp[t]) return;
   if (d.e.length) { const set = eatenSet(t, ep); for (const id of d.e) set.add(id); }
   if (t !== town) return;
