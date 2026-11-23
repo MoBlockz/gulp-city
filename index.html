@@ -218,7 +218,7 @@ canvas{display:block;touch-action:none}
     <b>20 Towns:</b> grow big enough to move up to a bigger town · reach Town 20 to win<br>
     <b>Classic:</b> one giant city, no levels · the game ends when the whole city is gulped<br>
     🧲 Magnet &nbsp; ⚡ Speed &nbsp; ❄️ Freeze rivals &nbsp; ✨ Golden things = 5× points
-    <br>👻 Rare Phantom: invisible + eat any player for 60s · 5% chance · 10-minute spawn cooldown
+    <br>👻 Phantom appears every 10 minutes: invisible + eat any player for 60s
   </div>
   <div id="best"></div>
   <button id="bugBtn" class="btn small grey">🐞 Problem log</button>
@@ -1369,13 +1369,9 @@ const PU = {
   phantom: { color: 0xc89cff, css: '#d4b3ff', icon: '👻', label: 'PHANTOM! Invisible + eat any player for 60s!' },
 };
 const SHIELD_TIME = 12;
-const PHANTOM_TIME = 60, PHANTOM_COOLDOWN = 600, PHANTOM_CHANCE = .05;
+const PHANTOM_TIME = 60, PHANTOM_INTERVAL = 600;
 const NORMAL_PU = ['magnet', 'speed', 'freeze', 'shield'];
-let phantomReadyAt = 0;
-function rollPUType() {
-  if (state === 'play' && isRoomAuthority() && gameT >= phantomReadyAt && Math.random() < PHANTOM_CHANCE) return 'phantom';
-  return pick(NORMAL_PU);
-}
+let phantomReadyAt = PHANTOM_INTERVAL;
 const puIconGeo = {
   phantom: merge([
     part(G.sph, 0xf4e8ff, [0, .15, 0], [.48, .55, .3]),
@@ -1407,9 +1403,8 @@ const puIconGeo = {
 const puIconMat = new THREE.MeshBasicMaterial({ vertexColors: true });
 let powerups = [], puTimer = 4, puSeq = 0;
 // In multiplayer one player (the "authority") rolls power-ups and tells everyone else where they are.
-function spawnPU(type = rollPUType(), x, z, id) {
+function spawnPU(type = pick(NORMAL_PU), x, z, id) {
   if (!PU[type]) return;
-  if (type === 'phantom') phantomReadyAt = Math.max(phantomReadyAt, gameT + PHANTOM_COOLDOWN);
   if (x == null) [x, z] = roadPoint();
   if (id == null) id = (net.myId || 'sp') + ':' + (puSeq++);
   const icon = new THREE.Mesh(puIconGeo[type], puIconMat); icon.position.y = 1.4; icon.scale.setScalar(1.3);
@@ -1434,6 +1429,15 @@ function applyPU(h, p) {
   if (state !== 'play') return;
   if (h.isPlayer) { banner(`${T.icon} ${T.label}`, T.css, 1.5); p.type === 'freeze' ? sfx.freeze() : sfx.power(); }
   else if (p.type === 'freeze' && player.alive) { banner(`❄️ FROZEN by ${h.name}!`, '#9feaff', 1.5); sfx.freeze(); }
+}
+function updatePhantomSpawn() {
+  if (state === 'play' && gameT >= phantomReadyAt && isRoomAuthority()) {
+    const slot = Math.floor(gameT / PHANTOM_INTERVAL);
+    phantomReadyAt = (slot + 1) * PHANTOM_INTERVAL;
+    const p = spawnPU('phantom', undefined, undefined, 'phantom-' + slot);
+    if (net.inGame) netSend('pu', { id: p.id, type: p.type, x: p.x, z: p.z, t: town, rareAt: phantomReadyAt });
+    banner('👻 PHANTOM HAS APPEARED!', '#d4b3ff', 2.5);
+  }
 }
 function updatePU(dt, time) {
   puTimer -= dt;
@@ -2370,7 +2374,7 @@ function spDefs() {
 
 function startGame(opts = {}) {
   initAudio();
-  releaseControls(); gameT = 0; clk = 0; phantomReadyAt = 0;
+  releaseControls(); gameT = 0; clk = 0; phantomReadyAt = PHANTOM_INTERVAL;
   townEp = new Array(TOWNS + 1).fill(0); eatenBy = new Map();
   townBorn = new Array(TOWNS + 1).fill(0);
   if (opts.mp) {
@@ -2472,7 +2476,7 @@ function updDash(dt) {
 $('dash').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); doDash(); });
 
 /* ---------------- problem log (see the script in <head>) ---------------- */
-const VERSION = '2026-11-23c';
+const VERSION = '2026-11-23d';
 window.__gcStarted = true;
 window.__gcCtx = () => ({
   player: localStorage.getItem('gulpcity_name') || '(no name)',
@@ -3065,7 +3069,7 @@ function beginSpectate(d) {
   baseSeed = d.seed >>> 0; gameMode = d.mode === 'classic' ? 'classic' : 'towns'; frenzy = !!d.frenzy;
   townEp = Array.isArray(d.townEp) ? d.townEp.slice(0, TOWNS + 1).map(v => v | 0) : new Array(TOWNS + 1).fill(0);
   townBorn = Array.from({ length: TOWNS + 1 }, (_, t) => Number.isFinite(d.townBorn?.[t]) ? d.townBorn[t] : 0);
-  phantomReadyAt = Number.isFinite(d.phantomReadyAt) ? d.phantomReadyAt : 0;
+  phantomReadyAt = Number.isFinite(d.phantomReadyAt) ? d.phantomReadyAt : (Math.floor((d.gameT || 0) / PHANTOM_INTERVAL) + 1) * PHANTOM_INTERVAL;
   while (townEp.length < TOWNS + 1) townEp.push(0);
   eatenBy = new Map(); for (const k in d.eaten || {}) eatenBy.set(k, new Set(d.eaten[k]));
   setHoles(d.holes.map(p => ({ name: p.name, color: p.c, remote: true, pid: p.pid })));
@@ -3157,6 +3161,7 @@ function step(dt, time) {
   if (state === 'play') {
     if (net.inGame && !net.spec) netTick(dt);
     updateTowns(dt);
+    updatePhantomSpawn();
   }
   // tiny props far from the action aren't worth drawing once you're huge
   lodT -= dt;

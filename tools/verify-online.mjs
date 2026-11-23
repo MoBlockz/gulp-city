@@ -112,14 +112,21 @@ try {
     return aiDir(ai,.01); })()`), [0,0], 'AI abandons a target that turns invisible');
   await a.T('updateHoles(60.01,0); syncHoles(0)');
   assert.equal(await a.T('holes[1].phantomT===0 && holes[1].grp.visible'), true, 'invisibility expires after one minute');
-  await a.T('frenzy=false; gameT=0; phantomReadyAt=0');
-  assert.equal(await a.T('withRandom(()=>.049,rollPUType)'), 'phantom', 'eligible roll below 5% spawns Phantom');
-  assert.notEqual(await a.T('withRandom(()=>.05,rollPUType)'), 'phantom', '5% threshold is exclusive');
-  await a.T(`spawnPU('phantom',30,30); true`);
-  assert.equal(await a.T('phantomReadyAt'), 600, 'Phantom starts ten-minute spawn cooldown');
-  assert.notEqual(await a.T('gameT=599.999; withRandom(()=>0,rollPUType)'), 'phantom', 'cooldown prevents early repeat');
-  assert.equal(await a.T('gameT=600; withRandom(()=>0,rollPUType)'), 'phantom', 'new rare roll allowed after ten minutes');
-  console.log('PASS larger maps, removed instant kills, 3x limit, Phantom effects, duration, chance and cooldown');
+  await a.T('frenzy=false; gameT=0; phantomReadyAt=PHANTOM_INTERVAL; clearWorld(); puTimer=99999');
+  await a.T('gameT=599.999; updatePhantomSpawn()');
+  assert.equal(await a.T('powerups.filter(p=>p.type==="phantom").length'), 0, 'no Phantom before ten minutes');
+  await a.T(`for(let i=0;i<12;i++) spawnPU('speed',-100,-100); gameT=600; withRandom(()=>.99,updatePhantomSpawn)`);
+  assert.equal(await a.T('powerups.filter(p=>p.type==="phantom").length'), 1, 'guaranteed Phantom at ten minutes despite full normal pickup capacity and high random roll');
+  await a.T('updatePhantomSpawn()');
+  assert.equal(await a.T('powerups.filter(p=>p.type==="phantom").length'), 1, 'same tick does not duplicate Phantom');
+  assert.equal(await a.T('phantomReadyAt'), 1200, 'next appearance scheduled at twenty minutes');
+  await a.T('gameT=1199.999; updatePhantomSpawn()');
+  assert.equal(await a.T('powerups.filter(p=>p.type==="phantom").length'), 1, 'no early second appearance');
+  await a.T('gameT=1200; updatePhantomSpawn()');
+  assert.equal(await a.T('powerups.filter(p=>p.type==="phantom").length'), 2, 'second guaranteed appearance at twenty minutes');
+  await a.T('clearWorld(); gameT=599.99; clk=599.99; phantomReadyAt=600; refillT=.01; step(.02,0)');
+  assert.equal(await a.T('powerups.some(p=>p.type==="phantom"&&!p.dead)'), true, 'ten-minute town rebuild cannot erase the scheduled Phantom');
+  console.log('PASS larger maps, removed instant kills, 3x limit, Phantom effects, duration and guaranteed schedule');
   // Traffic pauses at the correct curb, including reverse lanes and journeys across the map seam.
   await a.T(`startGame(); baseSeed=12345; loadTown(1);`);
   const initialStops = await a.T('busStops.length');
@@ -222,6 +229,12 @@ try {
     const bus=objById.get(window.__busTestId); bus.move.wait=2.5; netState()`);
   const busId = await authority.evaluate('window.__busTestId');
   await until(() => follower.T(`Math.abs(objById.get(${JSON.stringify(busId)}).move.wait-2.5)<.02`), 'bus stopping state synchronised online');
+  await a.T('gameT=600; updatePhantomSpawn()'); await b.T('gameT=600; updatePhantomSpawn()');
+  await until(() => a.T('powerups.some(p=>p.id==="phantom-1")'), 'scheduled Phantom exists for host');
+  await until(() => b.T('powerups.some(p=>p.id==="phantom-1")'), 'scheduled Phantom synchronised to guest');
+  assert.equal(await a.T('powerups.filter(p=>p.type==="phantom").length'), 1, 'host has one scheduled Phantom');
+  assert.equal(await b.T('powerups.filter(p=>p.type==="phantom").length'), 1, 'guest has one scheduled Phantom');
+  assert.equal(await b.T('phantomReadyAt'), 1200, 'next appearance synchronised across the room');
   await a.T('player.x = 12; player.z = 8; player.score = 123; netState()');
   await until(() => b.T('holes.find(h=>h.remote).score === 123 && holes.find(h=>h.remote).nx === 12'), 'movement and score relayed');
 
