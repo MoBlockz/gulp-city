@@ -52,7 +52,7 @@ async function browser(label) {
     if (m.method === 'Runtime.exceptionThrown') errors.push(m.params.exceptionDetails.exception?.description || m.params.exceptionDetails.text);
   };
   const send = (method, params = {}) => new Promise((resolve, reject) => {
-    const n = ++id, timer = setTimeout(() => { pending.delete(n); reject(new Error(method + ' timed out')); }, 15000);
+    const n = ++id, timer = setTimeout(() => { pending.delete(n); reject(new Error(method + ' timed out')); }, 30000);
     pending.set(n, m => { clearTimeout(timer); m.error ? reject(new Error(JSON.stringify(m.error))) : resolve(m.result); });
     ws.send(JSON.stringify({ id: n, method, params }));
   });
@@ -71,12 +71,24 @@ async function browser(label) {
     } };` : ''}` });
   await send('Page.navigate', { url: testUrl });
   await until(() => evaluate('typeof window.__t === "function"'), label + ' game loaded', 30000);
-  const session = { send, evaluate, errors, T: c => evaluate('window.__t(' + JSON.stringify(c) + ')') };
+  const session = { send, evaluate, errors, close: () => { ws.close(); proc.kill(); }, T: c => evaluate('window.__t(' + JSON.stringify(c) + ')').catch(e => {
+    throw new Error(e.message + '\nIn ' + label + ', while evaluating: ' + c.slice(0, 220));
+  }) };
   sessions.push(session); return session;
 }
 async function verify() {
 try {
-  const a = await browser('host');
+  let a = await browser('host');
+  if (process.argv.includes('--passengers-only')) {
+    await a.T(`startGame({mode:'towns'}); clearWorld(); busStops=[]; passengerGroups.clear();
+      window.__site={road:0,axis:'x',dir:1,pos:BLOCKS[1]}; addBusStop(__site,'isolation-stop');
+      window.__bus=objects.find(o=>o.kind==='bus'); __bus.x=__site.pos-2; clk=10; night=0;`);
+    console.log('BEFORE ARRIVAL', await a.T('JSON.stringify(objects.map(o=>[o.id,o.kind,o.move?.type]))'));
+    await a.T('moveObj(__bus,.4,10)');
+    console.log('AFTER ARRIVAL', await a.T('JSON.stringify(objects.map(o=>[o.id,o.kind,o.move?.type]))'));
+    assert.equal(await a.T('objects.filter(o=>o.move?.type==="passenger").length'),2);
+    console.log('PASS isolated daytime passenger arrival'); return;
+  }
   assert.equal(await a.evaluate('document.querySelector("#killBtn,#killPanel")'), null, 'instant-kill controls removed');
   assert.equal(await a.T('typeof doKill'), 'undefined', 'instant-kill code removed');
   await a.T('startGame(); loadTown(16)');
@@ -127,6 +139,63 @@ try {
   await a.T('clearWorld(); gameT=599.99; clk=599.99; phantomReadyAt=600; refillT=.01; step(.02,0)');
   assert.equal(await a.T('powerups.some(p=>p.type==="phantom"&&!p.dead)'), true, 'ten-minute town rebuild cannot erase the scheduled Phantom');
   console.log('PASS larger maps, removed instant kills, 3x limit, Phantom effects, duration and guaranteed schedule');
+  assert.equal(await a.T(`(() => {
+    resetHoles([[0,0],[.2,0]]); player.R=1; player.phantomT=60; holes[1].R=15; holes[1].phantomT=60;
+    holeVsHole(); return player.alive && holes[1].alive && !canEatHole(holes[1],player);
+  })()`), true, 'even another Phantom cannot swallow a protected player');
+  assert.equal(await a.T(`(() => {
+    player.frozenT=0; applyPU(holes[1],{type:'freeze',x:0,z:0});
+    onPick({type:'freeze',t:town,id:'test-freeze'},{peerId:'test-rival'});
+    return player.frozenT===0;
+  })()`), true, 'Phantom blocks local and multiplayer freezes');
+  await a.T('startGame({mode:"endless"})');
+  console.log('PASS Endless city loaded');
+  assert.deepEqual(await a.T('({mode:gameMode,town,refillT})'), {mode:'endless',town:0,refillT:900}, 'Endless starts in one city with a 15-minute rebuild timer');
+  await a.T('clearWorld(); player.score=111; player.growth=222; updateTowns(899)');
+  assert.equal(await a.T('state==="play" && townEp[0]===0 && refillT===1'), true, 'empty Endless city waits for the scheduled rebuild');
+  await a.T('updateTowns(.99)');
+  assert.equal(await a.T('townEp[0]'), 0, 'no rebuild before fifteen minutes');
+  await a.T('updateTowns(.02)');
+  assert.equal(await a.T('townEp[0]===1 && objects.length>0 && refillT===900 && !frenzy && player.score===111 && player.growth===222'), true,
+    'Endless rebuild restores the city, resets Frenzy, and preserves score and growth');
+  assert.deepEqual(await a.T(`(() => {
+    const bus=spawn('bus',0,0); bus.gold=false; const before=player.score; finishEat(bus,player);
+    const tower=spawn('tower',0,0); const expected=objectPoints(tower), base=tower.pts; finishEat(tower,player);
+    return {busPoints:player.score-before-expected,towerBonus:expected-base,goldBus:objectPoints({kind:'bus',pts:25,gold:true})};
+  })()`), {busPoints:45,towerBonus:200,goldBus:145}, 'bus and skyscraper bonuses reach the real score, including gold buses');
+  a.close();
+  for (const mode of ['towns','classic','endless']) {
+    a = await browser('passengers-' + mode);
+    await a.T(`startGame({mode:${JSON.stringify(mode)}}); clearWorld(); busStops=[]; passengerGroups.clear();
+      window.__testSite={road:ROADS[Math.floor(ROADS.length/2)],axis:'x',dir:1,pos:BLOCKS[Math.floor(BLOCKS.length/2)]};
+      addBusStop(window.__testSite,'day-stop');
+      window.__testBus=objects.find(o=>o.kind==='bus'); __testBus.x=__testSite.pos-2;
+      night=0; clk=10; moveObj(__testBus,.4,10);`);
+    assert.equal(await a.T('objects.filter(o=>o.move?.type==="passenger").length'), 2, mode + ' daytime bus unloads two people');
+    const start = await a.T('objects.filter(o=>o.move?.type==="passenger").map(o=>[o.id,o.x,o.z])');
+    await a.T('clk=12; for(const p of objects) if(p.move?.type==="passenger") moveObj(p,.1,12)');
+    const walked = await a.T('objects.filter(o=>o.move?.type==="passenger").map(o=>[o.id,o.x,o.z])');
+    assert.notDeepEqual(walked, start, mode + ' passengers walk away onto the pavement');
+    await a.T('night=1; __testBus.x=__testSite.pos-2; __testBus.move.wait=0; __testBus.move.sinceStop=4; moveObj(__testBus,.4,12)');
+    assert.equal(await a.T('objects.filter(o=>o.move?.type==="passenger").length'), 2, mode + ' buses do not unload at night');
+    await a.T('loadTown(town)');
+    assert.equal(await a.T('objects.filter(o=>o.move?.type==="passenger").length'), 2, mode + ' passengers survive a town revisit');
+    await a.T('removeObj(objects.find(o=>o.move?.type==="passenger")); loadTown(town)');
+    assert.equal(await a.T('objects.filter(o=>o.move?.type==="passenger").length'), 1, mode + ' swallowed passenger stays gone');
+    if (mode === 'endless') {
+      assert.deepEqual(await a.T(`(() => { const snap=makeSnap(); beginSpectate(snap);
+        return {mode:gameMode,refillT,passengers:objects.filter(o=>o.move?.type==='passenger').length}; })()`),
+        {mode:'endless',refillT:900,passengers:1}, 'spectator snapshot restores Endless mode and live passengers');
+      if (process.env.ENDLESS_SHOT) {
+        await a.T('syncHoles(0); updateCamera(1); renderer.render(scene,camera)');
+        const shot=await a.send('Page.captureScreenshot',{format:'png'});
+        fs.writeFileSync(process.env.ENDLESS_SHOT,Buffer.from(shot.data,'base64'));
+      }
+    }
+    assert.deepEqual(a.errors,[], mode + ' runtime errors'); a.close();
+  }
+  console.log('PASS Endless rebuild, score bonuses, daytime passengers in every mode and full Phantom immunity');
+  a = await browser('host-online');
   // Traffic pauses at the correct curb, including reverse lanes and journeys across the map seam.
   await a.T(`startGame(); baseSeed=12345; loadTown(1);`);
   const initialStops = await a.T('busStops.length');
@@ -216,8 +285,11 @@ try {
   assert.deepEqual(await a.T('net.roster'), await b.T('net.roster'));
   await b.T(`pickLobbyColor(9)`);
   await until(() => a.T('net.roster[1].c === 9'), 'colour selection relayed');
+  await a.T(`$('mpModes').querySelector('[data-m="endless"]').click()`);
+  await until(() => b.T('net.lobbyMode==="endless"'), 'Endless mode selection synchronised');
   await a.T(`$('mpStart').click()`);
   await until(() => b.T('state === "play"'), 'start game relayed');
+  assert.equal(await b.T('gameMode==="endless" && town===0 && refillT===900'), true, 'Endless starts correctly online');
   assert.equal(await a.T('baseSeed'), await b.T('baseSeed'), 'shared city seed');
   const signature = `objects.filter(o=>!o.move&&o.kind!=='person').map(o=>[o.id,o.kind,o.x,o.z,o.gold])`;
   assert.deepEqual(await a.T(signature), await b.T(signature), 'same city in both browsers');
@@ -229,6 +301,11 @@ try {
     const bus=objById.get(window.__busTestId); bus.move.wait=2.5; netState()`);
   const busId = await authority.evaluate('window.__busTestId');
   await until(() => follower.T(`Math.abs(objById.get(${JSON.stringify(busId)}).move.wait-2.5)<.02`), 'bus stopping state synchronised online');
+  await authority.T(`night=0; const bus=objById.get(window.__busTestId);
+    const stop=busStops.find(s=>s.stop.axis===bus.move.axis&&s.stop.dir===bus.move.dir&&s.stop.lane===(bus.move.axis==='x'?bus.z:bus.x));
+    bus.move.visit=(bus.move.visit||0)+1; unloadPassengers(bus,stop);`);
+  await until(() => follower.T('objects.some(o=>o.move?.type==="passenger")'), 'daytime bus passengers synchronised online');
+  assert.deepEqual(await authority.T('passengerSnapshot()'), await follower.T('passengerSnapshot()'), 'same passenger IDs and routes on both browsers');
   await a.T('gameT=600; updatePhantomSpawn()'); await b.T('gameT=600; updatePhantomSpawn()');
   await until(() => a.T('powerups.some(p=>p.id==="phantom-1")'), 'scheduled Phantom exists for host');
   await until(() => b.T('powerups.some(p=>p.id==="phantom-1")'), 'scheduled Phantom synchronised to guest');
@@ -247,6 +324,9 @@ try {
   assert.equal(await a.T(`['kill','died','kblock'].some(n=>n in net.A)`), false, 'instant-kill network actions removed');
   await a.T(`applyPU(player,{type:'phantom',x:player.x,z:player.z}); netState()`);
   await until(() => b.T('holes.find(h=>h.remote).phantomT>59'), 'Phantom state synchronised online');
+  await b.T(`netSend('pick',{type:'freeze',t:town,id:'protection-test'})`);
+  await until(() => a.T(`$('banner').textContent.includes('PHANTOM BLOCKED FREEZE')`), 'Phantom protection blocks a rival Freeze online');
+  assert.equal(await a.T('player.alive && player.frozenT===0'),true,'protected player remains alive and unfrozen');
   await b.T('syncHoles(0); updateTags()');
   assert.equal(await b.T('!holes.find(h=>h.remote).grp.visible && holes.find(h=>h.remote).tag.style.display==="none"'), true, 'opponent is invisible online');
   await a.T(`net.room.makeAction('kill').send({t:net.roster[1].id})`);
@@ -274,6 +354,10 @@ try {
   await until(() => b.T('net.room.isConnected()'), 'internet reconnection', 20000);
   await b.T('player.score = 456; netState()');
   await until(() => a.T('holes.find(h=>h.remote).score === 456'), 'state resumes after reconnection');
+  const refillEpoch = await authority.T('townEp[0]+1');
+  await authority.T('refillT=0; updateTowns(0)');
+  await until(() => follower.T(`townEp[0]===${refillEpoch}`), 'Endless rebuild synchronised online');
+  assert.equal(await follower.T('gameMode==="endless" && refillT===900 && !frenzy'),true,'guest keeps Endless mode and fresh 15-minute timer after rebuild');
   await b.T('toMenu()');
   await until(() => a.T('holes.length === 1'), 'departed player removed', 5000);
   await a.T('toMenu()');

@@ -217,8 +217,10 @@ canvas{display:block;touch-action:none}
     Eat things smaller than you: cones → people → cars → trees → houses → skyscrapers → the 2000 ft tower<br>
     <b>20 Towns:</b> grow big enough to move up to a bigger town · reach Town 20 to win<br>
     <b>Classic:</b> one giant city, no levels · the game ends when the whole city is gulped<br>
+    <b>Endless:</b> one giant city · everything returns every 15 minutes · keep your size and score<br>
+    Daytime buses drop off people · buses give +20 bonus points · skyscrapers give +200<br>
     🧲 Magnet &nbsp; ⚡ Speed &nbsp; ❄️ Freeze rivals &nbsp; ✨ Golden things = 5× points
-    <br>👻 Phantom appears every 10 minutes: invisible + eat any player for 60s
+    <br>👻 Phantom appears every 10 minutes: invisible, untouchable + eat any player for 60s
   </div>
   <div id="best"></div>
   <button id="bugBtn" class="btn small grey">🐞 Problem log</button>
@@ -928,6 +930,8 @@ let objSeq = 0, objById = new Map(), totalObjs = 1, giantObj = null;
 let clk = 0;                // seconds since the round began: traffic is a pure function of it, so every player sees the same cars
 const BUS_STOP_INTERVAL = 20, BUS_DWELL = 3;
 let busStops = [], busStopSites = [], nextBusStop = 0;
+let passengerGroups = new Map();
+const MAX_PASSENGERS = 120;
 
 function spawn(kind, x, z, rotY = 0, move = null, id = null) {
   const d = DEF[kind];
@@ -1143,7 +1147,10 @@ function moveBus(o, dt) {
     const travel = Math.min(m.speed * remaining, distance);
     p = ((p + m.dir * travel + WRAP) % span + span) % span - WRAP;
     m.sinceStop += travel; remaining -= travel / m.speed;
-    if (next && travel >= distance - 1e-7) { m.wait = BUS_DWELL; m.lastStop = next.id; m.sinceStop = 0; }
+    if (next && travel >= distance - 1e-7) {
+      m.wait = BUS_DWELL; m.lastStop = next.id; m.sinceStop = 0; m.visit = (m.visit || 0) + 1;
+      unloadPassengers(o, next);
+    }
     else break;
   }
   if (m.axis === 'x') o.x = p; else o.z = p;
@@ -1153,7 +1160,7 @@ function busAuthority() {
 }
 function busState() {
   return objects.filter(o => o.kind === 'bus' && o.state === 'idle' && o.move).map(o =>
-    [o.id, r2(o.x), r2(o.z), r2(o.move.wait), o.move.lastStop, r2(o.move.sinceStop)]);
+    [o.id, r2(o.x), r2(o.z), r2(o.move.wait), o.move.lastStop, r2(o.move.sinceStop), o.move.visit || 0]);
 }
 function applyBusState(data) {
   if (!Array.isArray(data)) return;
@@ -1162,8 +1169,59 @@ function applyBusState(data) {
     const o = objById.get(row[0]);
     if (!o || o.kind !== 'bus' || o.state !== 'idle' || !o.move) continue;
     o.x = row[1]; o.z = row[2]; o.move.wait = clamp(row[3], 0, BUS_DWELL); o.move.lastStop = row[4]; o.move.sinceStop = row[5];
+    o.move.visit = Math.max(0, row[6] | 0);
     o.grp.position.x = o.x; o.grp.position.z = o.z;
   }
+}
+function spawnPassenger(row) {
+  if (objById.has(row[0])) return;
+  let seed = baseSeed;
+  for (const ch of row[0]) seed = Math.imul(seed ^ ch.charCodeAt(0), 16777619);
+  const o = withRandom(mulberry32(seed >>> 0), () => spawn('person', row[1], row[2], 0, {
+    type: 'passenger', x0: row[1], z0: row[2], cx: row[3], cz: row[4], s0: row[5], dir: row[6], born: row[7], speed: 1.2
+  }, row[0]));
+  moveObj(o, 0, clk);
+  totalObjs++;
+}
+function rememberPassengers(d) {
+  if (!d || !Number.isInteger(d.t) || d.t < 0 || d.t > TOWNS || !Number.isInteger(d.ep) || d.ep < townEp[d.t] ||
+      !Array.isArray(d.people) || d.people.length > MAX_PASSENGERS) return false;
+  if (d.ep > townEp[d.t]) refillTown(d.t, d.ep, Number.isFinite(d.born) ? d.born : clk);
+  const key = townKey(d.t, d.ep), gone = eatenBy.get(key);
+  let group = passengerGroups.get(key);
+  if (!group) { group = { t: d.t, ep: d.ep, born: townBorn[d.t], people: new Map() }; passengerGroups.set(key, group); }
+  for (const id of group.people.keys()) if (gone?.has(id)) group.people.delete(id);
+  let added = false;
+  for (const row of d.people) {
+    if (!Array.isArray(row) || typeof row[0] !== 'string' || !row[0].startsWith('passenger:') || row[0].length > 160 ||
+        row.length !== 8 || !row.slice(1).every(Number.isFinite) || ![-1, 1].includes(row[6]) || gone?.has(row[0])) continue;
+    if (!group.people.has(row[0]) && group.people.size < MAX_PASSENGERS) { group.people.set(row[0], row.slice()); added = true; }
+    if (group.people.has(row[0]) && d.t === town) spawnPassenger(row);
+  }
+  return added;
+}
+function unloadPassengers(bus, stop) {
+  if (state !== 'play' || night >= .35 || !isPuAuthority()) return;
+  const s = stop.stop, m = bus.move;
+  const cx = clamp(s.axis === 'x' ? s.pos : s.road - s.dir * 15, BLOCKS[0], BLOCKS[BLOCKS.length - 1]);
+  const cz = clamp(s.axis === 'z' ? s.pos : s.road - s.dir * 15, BLOCKS[0], BLOCKS[BLOCKS.length - 1]);
+  const people = [];
+  for (let i = 0; i < 2; i++) {
+    const along = (i - .5) * .7;
+    const x = s.axis === 'x' ? s.pos + along : s.lane - s.dir * 1.05;
+    const z = s.axis === 'z' ? s.pos + along : s.lane - s.dir * 1.05;
+    const side = [.5, 1.5, 2.5, 3.5].reduce((best, value) => {
+      const [bx, bz] = perim(cx, cz, best), [px, pz] = perim(cx, cz, value);
+      return Math.hypot(px - x, pz - z) < Math.hypot(bx - x, bz - z) ? value : best;
+    });
+    people.push(['passenger:' + bus.id + ':' + m.visit + ':' + i, x, z, cx, cz, side + along / 19.6, i ? 1 : -1, clk]);
+  }
+  const data = { t: town, ep: townEp[town], born: townBorn[town], people };
+  if (rememberPassengers(data) && net.inGame) netSend('passengers', data);
+}
+function passengerSnapshot() {
+  return [...passengerGroups.values()].filter(g => g.ep === townEp[g.t]).map(g => ({ t: g.t, ep: g.ep, born: g.born,
+    people: [...g.people.values()].filter(row => !eatenBy.get(townKey(g.t, g.ep))?.has(row[0])) }));
 }
 let bigK = 1;   // building height multiplier for the current town
 // CLASSIC mode's one giant city: downtown around the 2000 ft tower, suburbs and parks toward the edges
@@ -1366,7 +1424,7 @@ const PU = {
   speed:  { color: 0xffd400, css: '#f5b800', icon: '⚡', label: 'SPEED BOOST!' },
   freeze: { color: 0x6fe3ff, css: '#38bfe0', icon: '❄️', label: 'RIVALS FROZEN!' },
   shield: { color: 0x3dff8c, css: '#1fbf63', icon: '🛡️', label: 'SHIELD! Blocks normal gulps and freezes' },
-  phantom: { color: 0xc89cff, css: '#d4b3ff', icon: '👻', label: 'PHANTOM! Invisible + eat any player for 60s!' },
+  phantom: { color: 0xc89cff, css: '#d4b3ff', icon: '👻', label: 'PHANTOM! Invisible, untouchable + eat any player for 60s!' },
 };
 const SHIELD_TIME = 12;
 const PHANTOM_TIME = 60, PHANTOM_INTERVAL = 600;
@@ -1423,12 +1481,12 @@ function applyPU(h, p) {
   if (p.type === 'magnet') h.magnetT = 7;
   else if (p.type === 'speed') h.speedT = 6;
   else if (p.type === 'shield') h.shield = Math.max(h.shield, SHIELD_TIME);
-  else if (p.type === 'phantom') h.phantomT = PHANTOM_TIME;
-  else for (const o of holes) if (o !== h && o.alive && !(o.shield > 0)) o.frozenT = 3;   // shields block freezes
+  else if (p.type === 'phantom') { h.phantomT = PHANTOM_TIME; h.frozenT = 0; }
+  else for (const o of holes) if (o !== h && o.alive && !(o.shield > 0) && !(o.phantomT > 0)) o.frozenT = 3;
   burst(p.x, 1.2, p.z, T.color, 30, 6, .45);
   if (state !== 'play') return;
   if (h.isPlayer) { banner(`${T.icon} ${T.label}`, T.css, 1.5); p.type === 'freeze' ? sfx.freeze() : sfx.power(); }
-  else if (p.type === 'freeze' && player.alive) { banner(`❄️ FROZEN by ${h.name}!`, '#9feaff', 1.5); sfx.freeze(); }
+  else if (p.type === 'freeze' && player.alive && player.frozenT > 0) { banner(`❄️ FROZEN by ${h.name}!`, '#9feaff', 1.5); sfx.freeze(); }
 }
 function updatePhantomSpawn() {
   if (state === 'play' && gameT >= phantomReadyAt && isRoomAuthority()) {
@@ -1861,6 +1919,13 @@ function moveObj(o, dt, time) {
       const W2 = 2 * WRAP, p = (((m.p0 + WRAP + m.dir * m.speed * clk) % W2) + W2) % W2 - WRAP;
       if (m.axis === 'x') o.x = p; else o.z = p;
     }
+  } else if (m.type === 'passenger') {
+    const age = Math.max(0, clk - m.born), s = m.s0 + m.dir * m.speed * Math.max(0, age - 1.5) / 19.6;
+    const [x, z] = perim(m.cx, m.cz, ((s % 4) + 4) % 4);
+    const u = Math.min(1, age / 1.5), oldX = o.x, oldZ = o.z;
+    o.x = lerp(m.x0, x, u); o.z = lerp(m.z0, z, u);
+    if (o.x !== oldX || o.z !== oldZ) o.grp.rotation.y = Math.atan2(o.x - oldX, o.z - oldZ);
+    o.grp.position.y = Math.abs(Math.sin(time * 9)) * .07;
   } else if (m.type === 'walk') {
     m.s = (((m.s0 + m.dir * m.speed * clk / 19.6) % 4) + 4) % 4;
     const [px, pz] = perim(m.cx, m.cz, m.s), dx = px - o.x, dz = pz - o.z;
@@ -1890,10 +1955,11 @@ function startFall(o, h) {
   o.move = null;
   o.grp.matrixAutoUpdate = true; o.grp.visible = true;
 }
+function objectPoints(o) { return o.pts * (o.gold ? 5 : 1) + (o.kind === 'bus' ? 20 : o.kind === 'tower' ? 200 : 0); }
 function finishEat(o, h) {
   removeObj(o);
   if (h.isPlayer && net.inGame) net.eaten.push(o.id);
-  const pts = o.pts * (o.gold ? 5 : 1);
+  const pts = objectPoints(o);
   addPoints(h, pts);
   burst(h.x, .3, h.z, o.gold ? 0xffd54a : o.color, Math.min(34, 6 + o.r * 6), 2.5 + o.r * 1.4, .22 + o.r * .1);
   if (h.isPlayer && state === 'play') {
@@ -2028,8 +2094,8 @@ function holeVsHole() {
       }
       continue;
     }
-    if (aBig && (b.shield <= 0 || a.phantomT > 0) && d < a.R - b.R * .25) { if (!mp) eatHole(a, b); else if (b.isPlayer) netGulpedBy(a); continue; }
-    if (bBig && (a.shield <= 0 || b.phantomT > 0) && d < b.R - a.R * .25) { if (!mp) eatHole(b, a); else if (a.isPlayer) netGulpedBy(b); continue; }
+    if (aBig && (b.shield <= 0 || a.phantomT > 0) && d < gulpReach(a, b)) { if (!mp) eatHole(a, b); else if (b.isPlayer) netGulpedBy(a); continue; }
+    if (bBig && (a.shield <= 0 || b.phantomT > 0) && d < gulpReach(b, a)) { if (!mp) eatHole(b, a); else if (a.isPlayer) netGulpedBy(b); continue; }
     const minD = (a.R + b.R) * .8;
     if (!aBig && !bBig && d < minD) {
       const p = (minD - d) / (mp ? 1 : 2);
@@ -2133,10 +2199,12 @@ const stats = { biggest: null, eaten: 0, gulped: 0 };
 const fmtT = t => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
 // can hole a swallow hole b? Being a whole size bigger always counts, even if the radii are close.
 function canEatHole(a, b) {
+  if (b.phantomT > 0) return false;
   if (a.phantomT > 0) return true;
   if (frenzy) return b.R <= a.R * 3;
   return a.R > b.R * 1.1 || (a.level > b.level && a.R > b.R * 1.02);
 }
+function gulpReach(a, b) { return a.phantomT > 0 ? Math.max(a.R * .8, a.R - b.R * .25) : a.R - b.R * .25; }
 function chooseHoleEater(a, b, dx, dz, distance) {
   if ((a.phantomT > 0) !== (b.phantomT > 0)) return a.phantomT > 0 ? a : b;
   const aApproach = (a.vx * dx + a.vz * dz) / distance;
@@ -2150,11 +2218,11 @@ function updHUD() {
   $('score').textContent = P.score.toLocaleString();
   $('sizeName').textContent = (net.spec ? `👀 ${P.name} · ` : '') + `SIZE ${P.level + 1} · ${L.name}`;
   $('sizeBar').style.width = (N ? clamp((P.growth - L.need) / (N.need - L.need), 0, 1) * 100 : 100) + '%';
-  $('canEat').textContent = net.spec ? 'Spectating · tap or ← → to switch player' : P.phantomT > 0 ? '👻 PHANTOM: invisible · eat any player!' : frenzy ? '🔥 EAT ANYTHING · players up to 3× your size' : 'Can now eat: ' + L.eats;
+  $('canEat').textContent = net.spec ? 'Spectating · tap or ← → to switch player' : P.phantomT > 0 ? '👻 PHANTOM: protected · eat any player!' : frenzy ? '🔥 EAT ANYTHING · players up to 3× your size' : 'Can now eat: ' + L.eats;
   const pct = Math.floor((1 - objects.length / totalObjs) * 100);
-  const classic = gameMode === 'classic';
+  const classic = gameMode !== 'towns';
   const nextPct = town >= TOWNS ? 100 : Math.floor(clamp((P.growth - townNeed(town)) / (townNeed(town + 1) - townNeed(town)), 0, 1) * 100);
-  if (classic) $('timer').innerHTML = `${dayIcon} ${fmtT(gameT)}<small>${pct}% OF THE CITY GULPED · ${objects.length.toLocaleString()} LEFT</small>`;
+  if (classic) $('timer').innerHTML = `${dayIcon} ${fmtT(gameT)}<small>${gameMode === 'endless' ? 'REBUILDS IN ' + fmtT(Math.max(0, refillT)) + ' · ' : ''}${pct}% OF THE CITY GULPED · ${objects.length.toLocaleString()} LEFT</small>`;
   else $('timer').innerHTML = `🏙️ TOWN ${town}/${TOWNS} · ${dayIcon} ${fmtT(gameT)}<small>NEXT TOWN ${nextPct}% · ${pct}% EATEN · REBUILDS IN ${fmtT(Math.max(0, refillT))}</small>`;
   const sorted = [...holes].sort((a, b) => (classic ? 0 : townOf(b) - townOf(a)) || b.score - a.score);
   let show = sorted.slice(0, 6);
@@ -2166,7 +2234,7 @@ function updHUD() {
   }).join('');
   let chips = '';
   if (P.magnetT > 0) chips += `<div class="chip" style="--c:#ff4d4d">🧲 ${P.magnetT.toFixed(1)}</div>`;
-  if (P.phantomT > 0) chips += `<div class="chip" style="--c:#d4b3ff">👻 INVISIBLE + EAT ANYONE ${Math.ceil(P.phantomT)}s</div>`;
+  if (P.phantomT > 0) chips += `<div class="chip" style="--c:#d4b3ff">👻 INVISIBLE + UNTOUCHABLE ${Math.ceil(P.phantomT)}s</div>`;
   if (P.speedT > 0) chips += `<div class="chip" style="--c:#f5b800">⚡ ${P.speedT.toFixed(1)}</div>`;
   if (P.shield > 0 && !(P.boostT > 0) && !net.spec) chips += `<div class="chip" style="--c:#1fbf63">🛡️ SHIELD ${P.shield.toFixed(1)}</div>`;
   if (P.boostT > 0) chips += `<div class="chip" style="--c:#8a5cff">🛡️ SAFE + 2× SPEED ${P.boostT.toFixed(1)}</div>`;
@@ -2203,8 +2271,9 @@ function drawMini(time) {
 
 /* ---------------- game flow ---------------- */
 // two ways to play: 'towns' (20 levels, reach Town 20) or 'classic' (one giant city, eat it all)
-let modePref = localStorage.getItem('gulpcity_mode') === 'classic' ? 'classic' : 'towns', gameMode = 'towns', frenzy = false;
-const MODE_NAMES = { towns: '🏙️ 20 TOWNS', classic: '🌆 CLASSIC' };
+const MODE_NAMES = { towns: '🏙️ 20 TOWNS', classic: '🌆 CLASSIC', endless: '♾️ ENDLESS' };
+const gameModeOrDefault = value => Object.hasOwn(MODE_NAMES, value) ? value : 'towns';
+let modePref = gameModeOrDefault(localStorage.getItem('gulpcity_mode')), gameMode = 'towns', frenzy = false;
 let state = 'menu', mode = 'sp', hudT = 0, miniT = 0, lodT = 0, overLock = false, gameT = 0;
 const bestKey = 'gulpcity_best';
 const getBest = () => +(localStorage.getItem(bestKey) || 0);
@@ -2230,6 +2299,8 @@ function clearWorld() {
    20 towns, each a seeded city. Town t rebuilds (new "epoch") every 10 minutes, or early once it's
    nearly eaten. Everyone remembers what was eaten in each town+epoch, so arriving players see the same state. */
 const REFILL_TIME = 600;
+const ENDLESS_REFILL_TIME = 900;
+const refillPeriod = () => gameMode === 'endless' ? ENDLESS_REFILL_TIME : REFILL_TIME;
 let town = 1, townEp = new Array(TOWNS + 1).fill(0), townBorn = new Array(TOWNS + 1).fill(0), eatenBy = new Map(), baseSeed = 1, refillT = REFILL_TIME, earlyRefillT = 0;
 const townKey = (t, ep) => t + ':' + ep;
 function eatenSet(t, ep) { const k = townKey(t, ep); let s = eatenBy.get(k); if (!s) eatenBy.set(k, s = new Set()); return s; }
@@ -2249,6 +2320,10 @@ function loadTown(t) {
     objects = objects.filter(o => o.state !== 'gone'); needsClean = false;
   }
   for (const k of [...eatenBy.keys()]) { const [kt, ke] = k.split(':').map(Number); if (ke < townEp[kt]) eatenBy.delete(k); }
+  for (const [key, group] of passengerGroups) {
+    if (group.ep < townEp[group.t]) passengerGroups.delete(key);
+    else if (group.t === town) for (const row of group.people.values()) if (!gone?.has(row[0])) spawnPassenger(row);
+  }
   for (const h of holes) {
     if (!h.remote) continue;
     const here = !!h.netAlive && h.town === t;
@@ -2299,6 +2374,7 @@ function refillTown(t, ep, born = clk) {
   townEp[t] = ep;
   townBorn[t] = born;
   if (t === town && state === 'play') {
+    if (gameMode === 'endless') frenzy = false;
     loadTown(town);
     banner('🏗️ THE TOWN HAS BEEN REBUILT!', '#9be7ff', 2);
     for (const h of holes) if (h.alive) ringFX(h.x, h.z, h.R, h.baseColor);
@@ -2306,8 +2382,8 @@ function refillTown(t, ep, born = clk) {
 }
 function applyRefills(eps, born = clk) {
   if (!Array.isArray(eps)) return;
-  for (let t = 1; t <= TOWNS; t++) refillTown(t, eps[t] | 0, born);
-  refillT = REFILL_TIME;
+  for (let t = 0; t <= TOWNS; t++) refillTown(t, eps[t] | 0, born);
+  refillT = refillPeriod();
 }
 function isRoomAuthority() {
   if (!net.inGame) return true;
@@ -2320,10 +2396,18 @@ function updateClassic() {
   if (!frenzy && objects.length <= Math.max(25, totalObjs * .06)) {
     frenzy = true; banner('🔥 EAT ANYTHING! Players up to 3× your size!', '#ff8bd1', 2.6); sfx.levelUp();
   }
-  if (objects.length === 0) { if (net.inGame && !net.spec) netSend('end', { classic: 1 }); endGame('eaten'); }
+  if (gameMode === 'classic' && objects.length === 0) { if (net.inGame && !net.spec) netSend('end', { classic: 1 }); endGame('eaten'); }
 }
 function updateTowns(dt) {
   if (gameMode === 'classic') { updateClassic(); return; }
+  if (gameMode === 'endless') {
+    updateClassic(); refillT = Math.max(0, refillT - dt);
+    if (refillT <= 0 && isRoomAuthority()) {
+      const eps = townEp.map((e, t) => t === 0 ? e + 1 : e);
+      applyRefills(eps); if (net.inGame) netSend('refill', { eps, born: clk });
+    }
+    return;
+  }
   // every 10 minutes every town is rebuilt (one player decides, so everyone agrees)
   refillT -= dt;
   if (refillT <= 0) {
@@ -2354,7 +2438,7 @@ function renderSwatches(el, mine, taken, onPick) {
 function renderModes(el, cur, onPick) {
   el.innerHTML = Object.keys(MODE_NAMES).map(m =>
     `<button class="mode${m === cur ? ' on' : ''}" data-m="${m}" ${onPick ? '' : 'disabled'}>${MODE_NAMES[m]}<small>${m === 'towns'
-      ? 'Grow to move up · reach Town 20 to win' : 'One giant city · eat it all'}</small></button>`).join('');
+      ? 'Grow to move up · reach Town 20 to win' : m === 'endless' ? 'City respawns every 15 minutes' : 'One giant city · eat it all'}</small></button>`).join('');
   el.onclick = e => { const b = e.target.closest('.mode'); if (b && onPick) onPick(b.dataset.m); };
 }
 function showSpModes() { renderModes($('spModes'), modePref, m => { modePref = m; localStorage.setItem('gulpcity_mode', m); showSpModes(); }); }
@@ -2377,6 +2461,7 @@ function startGame(opts = {}) {
   releaseControls(); gameT = 0; clk = 0; phantomReadyAt = PHANTOM_INTERVAL;
   townEp = new Array(TOWNS + 1).fill(0); eatenBy = new Map();
   townBorn = new Array(TOWNS + 1).fill(0);
+  passengerGroups = new Map();
   if (opts.mp) {
     mode = 'mp'; baseSeed = opts.seed >>> 0;
     setHoles(opts.roster.map(p => ({ name: p.name, color: MP_COLORS[clamp(p.c | 0, 0, MP_COLORS.length - 1)],
@@ -2386,17 +2471,17 @@ function startGame(opts = {}) {
     setHoles(spDefs());
   }
   holes.forEach(h => { h.town = 1; h.netAlive = true; });
-  gameMode = opts.mode || modePref; frenzy = false;
-  loadTown(gameMode === 'classic' ? 0 : 1);
+  gameMode = gameModeOrDefault(opts.mode || modePref); frenzy = false;
+  loadTown(gameMode === 'towns' ? 1 : 0);
   holes.forEach(h => { h.town = town; });
   resetHoles(startsFor(holes.length));
-  gameT = 0; clk = 0; refillT = REFILL_TIME; earlyRefillT = 5; puTimer = 3; puSeq = 0; shake = 0; giantFade = 1;
+  gameT = 0; clk = 0; refillT = refillPeriod(); earlyRefillT = 5; puTimer = 3; puSeq = 0; shake = 0; giantFade = 1;
   stats.biggest = null; stats.eaten = 0; stats.gulped = 0;
   camBase.set(player.x, 30, player.z + 30); camLook.set(player.x, 0, player.z);
   state = 'play';
   only('hud', 'quit', 'dash'); $('quit').textContent = '🏁 END'; dashT = 0; dashCd = 0;
   updHUD(); drawMini(0);
-  banner(gameMode === 'classic' ? 'GULP THE WHOLE CITY!' : `🏙️ TOWN 1 of ${TOWNS} — GULP!`, '#ffe66d', 1.6); sfx.start();
+  banner(gameMode === 'endless' ? '♾️ ENDLESS! THE CITY RETURNS EVERY 15 MINUTES!' : gameMode === 'classic' ? 'GULP THE WHOLE CITY!' : `🏙️ TOWN 1 of ${TOWNS} — GULP!`, '#ffe66d', 1.6); sfx.start();
 }
 function endGame(reason, winnerName) {
   if (state !== 'play') return;
@@ -2404,7 +2489,7 @@ function endGame(reason, winnerName) {
   touch.active = false; $('joy').classList.add('hidden');
   sfx.end();
   if (reason !== 'quit') lastGame = null;   // finished games can't be spectated
-  const classic = gameMode === 'classic';
+  const classic = gameMode !== 'towns';
   const sorted = [...holes].sort((a, b) => (classic ? 0 : townOf(b) - townOf(a)) || b.score - a.score);
   const watching = !!net.spec;
   const me = watching ? (sorted[0] || null) : player;
@@ -2433,6 +2518,7 @@ function endGame(reason, winnerName) {
 function menuWorld() {
   mode = 'sp'; gameMode = 'towns'; frenzy = false; baseSeed = (Math.random() * 2 ** 31) >>> 0;
   townEp = new Array(TOWNS + 1).fill(0); eatenBy = new Map();
+  passengerGroups = new Map();
   setHoles(spDefs()); loadTown(17); resetHoles(startsFor(holes.length));
 }
 function toMenu() {
@@ -2476,12 +2562,12 @@ function updDash(dt) {
 $('dash').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); doDash(); });
 
 /* ---------------- problem log (see the script in <head>) ---------------- */
-const VERSION = '2026-11-23d';
+const VERSION = '2026-11-24a';
 window.__gcStarted = true;
 window.__gcCtx = () => ({
   player: localStorage.getItem('gulpcity_name') || '(no name)',
   screen: state,
-  mode: state === 'play' || state === 'over' ? (mode === 'mp' ? 'multiplayer' : 'single player') + ' · ' + (gameMode === 'classic' ? 'Classic' : 'Town ' + town) : '',
+  mode: state === 'play' || state === 'over' ? (mode === 'mp' ? 'multiplayer' : 'single player') + ' · ' + (gameMode === 'towns' ? 'Town ' + town : MODE_NAMES[gameMode]) : '',
   role: net.spec ? 'spectator' : net.inGame ? (net.isHost ? 'host' : 'guest') : '',
   players: holes.length, size: player ? player.level + 1 : 0, time: fmtT(gameT), quality: qLevel, version: VERSION,
 });
@@ -2525,7 +2611,7 @@ updBugBtn();
 
 /* ---------------- multiplayer ----------------
    Game messages travel over secure WebSockets through internet relays, so routers do not need to allow WebRTC.
-   - "lobby-v3" room: hosts advertise open games; seekers get asked "Join X's game?"
+   - "lobby-v4" room: hosts advertise open games; seekers get asked "Join X's game?"
    - "g-<code>" room: one game, up to 20 players. Host owns the roster and presses START.
    In-game each player is the authority for its own hole: it streams its position/size and what it ate. */
 const MQTT_URL = 'https://cdn.jsdelivr.net/npm/mqtt@5.10.4/dist/mqtt.esm.js';
@@ -2545,10 +2631,10 @@ function joinRelayRoom(config, roomId) {
   let resolveReady, rejectReady, heartbeat, connectTimer, wasOffline = false;
   const ready = new Promise((resolve, reject) => { resolveReady = resolve; rejectReady = reject; });
   // Room codes isolate games on the shared brokers; encrypt their contents with a room-specific key.
-  const roomSeed = config.appId + '/relay-v3/' + roomId;
+  const roomSeed = config.appId + '/relay-v4/' + roomId;
   const keyReady = Promise.all(['route/', 'data/'].map(domain =>
     crypto.subtle.digest('SHA-256', encoder.encode(domain + roomSeed)))).then(async ([routeHash, keyHash]) => ({
-    topic: 'gulpcity/v3/' + Array.from(new Uint8Array(routeHash), b => b.toString(16).padStart(2, '0')).join(''),
+    topic: 'gulpcity/v4/' + Array.from(new Uint8Array(routeHash), b => b.toString(16).padStart(2, '0')).join(''),
     key: await crypto.subtle.importKey('raw', keyHash, 'AES-GCM', false, ['encrypt', 'decrypt'])
   }));
   const online = () => clients.filter(c => c.live && c.client.connected);
@@ -2571,7 +2657,7 @@ function joinRelayRoom(config, roomId) {
   }
   function forget(id) { if (peers.delete(id)) { latestState.delete(id); left({ peerId: id }); } }
   async function receive(payload) {
-    if (closed || payload.length < 29 || payload.length > 262144) return;
+    if (closed || payload.length < 29 || payload.length > 1048576) return;
     let m;
     try {
       const { key } = await keyReady;
@@ -2656,7 +2742,7 @@ function joinRelayRoom(config, roomId) {
 }
 const MAXP = 20;
 // ?lobby=xyz in the URL uses a separate private lobby (for testing without pulling in real players)
-const LOBBY_ROOM = 'lobby-v3' + ((new URLSearchParams(location.search).get('lobby') || '').replace(/[^a-z0-9]/gi, '').slice(0, 16).replace(/^(.)/, '-$1'));
+const LOBBY_ROOM = 'lobby-v4' + ((new URLSearchParams(location.search).get('lobby') || '').replace(/[^a-z0-9]/gi, '').slice(0, 16).replace(/^(.)/, '-$1'));
 const net = { lib: null, lobby: null, room: null, myId: null, inGame: false, isHost: false, started: false, myCode: null, gameCode: null,
   name: 'Player', hostName: '', ads: new Map(), declined: new Set(), roster: [], hostPeer: null, prompt: null,
   adTimer: 0, seekTimer: 0, A: {}, LA: {}, stT: 0, eaten: [], createdAt: 0, gen: 0, spec: null, snap: null };
@@ -2822,7 +2908,8 @@ async function joinGameRoom(code, host, hostName) {
   renderLobby();
 }
 function wireRoom(room, code) {
-  for (const n of ['hi', 'roster', 'full', 'start', 'st', 'ate', 'gulp', 'pu', 'pick', 'end', 'snap', 'refill', 'col', 'mode']) net.A[n] = room.makeAction(n);
+  for (const n of ['hi', 'roster', 'full', 'start', 'st', 'ate', 'gulp', 'pu', 'pick', 'end', 'snap', 'refill', 'col', 'mode', 'passengers']) net.A[n] = room.makeAction(n);
+  net.A.passengers.onMessage(d => { if (net.inGame) rememberPassengers(d); });
   net.A.hi.onMessage((d, { peerId }) => onHi(d, peerId));
   net.A.snap.onMessage(d => onSnap(d));
   net.A.roster.onMessage((d, { peerId }) => { if (peerId === net.hostPeer && Array.isArray(d)) { net.roster = d; renderLobby(); } });
@@ -2840,7 +2927,7 @@ function wireRoom(room, code) {
     if (d.t === town && !powerups.some(p => p.id === d.id)) spawnPU(d.type, d.x, d.z, d.id);
   });
   net.A.refill.onMessage(d => { if (!net.inGame || !d) return; const born = Number.isFinite(d.born) ? d.born : clk;
-    if (d.eps) applyRefills(d.eps, born); else if (d.t >= 1 && d.t <= TOWNS) refillTown(d.t, d.ep | 0, born); });
+    if (d.eps) applyRefills(d.eps, born); else if (d.t >= 0 && d.t <= TOWNS) refillTown(d.t, d.ep | 0, born); });
   net.A.col.onMessage((d, { peerId }) => {   // a guest asks the host for a colour
     if (!net.isHost || state !== 'lobby' || !d) return;
     const p = net.roster.find(q => q.id === peerId); if (!p) return;
@@ -2848,7 +2935,7 @@ function wireRoom(room, code) {
   });
   net.A.pick.onMessage(onPick);
   net.A.end.onMessage(d => {
-    if (!net.inGame || state !== 'play') return;
+    if (!net.inGame || state !== 'play' || gameMode === 'endless') return;
     if (gameMode === 'classic') endGame('eaten'); else endGame('lost', d && typeof d.name === 'string' ? d.name.slice(0, 14) : '');
   });
   net.A.mode.onMessage((d, { peerId }) => { if (peerId === net.hostPeer && d && MODE_NAMES[d.m]) { net.lobbyMode = d.m; renderLobby(); } });
@@ -2951,7 +3038,7 @@ function beginMP(d) {
   closeAsk(); clearTimeout(net.seekTimer); leaveLobby();
   net.inGame = true; net.eaten = []; net.stT = 0;
   lastGame = { code: net.gameCode, hostName: net.hostName };
-  startGame({ mp: true, seed: d.seed >>> 0, roster: d.roster.slice(0, MAXP), mode: d.mode === 'classic' ? 'classic' : 'towns' });
+  startGame({ mp: true, seed: d.seed >>> 0, roster: d.roster.slice(0, MAXP), mode: gameModeOrDefault(d.mode) });
 }
 // ---- in-game messages ----
 function netTick(dt) {
@@ -3001,6 +3088,7 @@ function onEaten(d, h) {
   }
 }
 function netGulpedBy(a) {
+  if (player.phantomT > 0) return;
   const pts = eatHole(a, player);
   player.lv++;
   netSend('gulp', { by: a.pid, pts, lv: player.lv });
@@ -3021,7 +3109,10 @@ function onPick(d, { peerId }) {
   const p = powerups.find(q => q.id === d.id);
   if (p && !p.dead) { p.dead = true; burst(p.x, 1.2, p.z, PU[p.type].color, 30, 6, .45); }
   const h = holeByPid(peerId);
-  if (d.type === 'phantom' && h) h.phantomT = PHANTOM_TIME;
+  if (d.type === 'phantom' && h) { h.phantomT = PHANTOM_TIME; h.frozenT = 0; }
+  if (d.type === 'freeze' && d.t === town && !net.spec && player.alive && state === 'play' && player.phantomT > 0) {
+    banner('👻 PHANTOM BLOCKED FREEZE!', '#d4b3ff', 1.3); return;
+  }
   if (d.type === 'freeze' && d.t === town && !net.spec && player.alive && state === 'play' && player.shield > 0) {
     banner('🛡️ FREEZE BLOCKED!', '#3dff8c', 1.3); return;
   }
@@ -3033,7 +3124,7 @@ function onPick(d, { peerId }) {
 function makeSnap() {
   const eaten = {};
   for (const [k, set] of eatenBy) eaten[k] = [...set];
-  return { seed: baseSeed, clk, gameT, townEp, townBorn, eaten, refillT, mode: gameMode, frenzy, phantomReadyAt, buses: busState(),
+  return { seed: baseSeed, clk, gameT, townEp, townBorn, eaten, refillT, mode: gameMode, frenzy, phantomReadyAt, buses: busState(), passengers: passengerSnapshot(),
     holes: holes.map(h => ({ pid: h.isPlayer ? net.myId : h.pid, name: h.name, c: h.baseColor.getHex(), x: r2(h.isPlayer ? h.x : h.nx), z: r2(h.isPlayer ? h.z : h.nz),
       R: r2(h.R), level: h.level, score: h.score, growth: h.growth, phantomT: h.phantomT, alive: (h.isPlayer ? h.alive : h.netAlive) ? 1 : 0, lv: h.lv, t: townOf(h) })),
     pus: powerups.filter(p => !p.dead).map(p => ({ id: p.id, type: p.type, x: p.x, z: p.z })) };
@@ -3066,7 +3157,7 @@ function beginSpectate(d) {
   clearTimeout(net.seekTimer); leaveLobby();
   initAudio();
   net.spec = 'on'; net.inGame = true; mode = 'mp';
-  baseSeed = d.seed >>> 0; gameMode = d.mode === 'classic' ? 'classic' : 'towns'; frenzy = !!d.frenzy;
+  baseSeed = d.seed >>> 0; gameMode = gameModeOrDefault(d.mode); frenzy = !!d.frenzy;
   townEp = Array.isArray(d.townEp) ? d.townEp.slice(0, TOWNS + 1).map(v => v | 0) : new Array(TOWNS + 1).fill(0);
   townBorn = Array.from({ length: TOWNS + 1 }, (_, t) => Number.isFinite(d.townBorn?.[t]) ? d.townBorn[t] : 0);
   phantomReadyAt = Number.isFinite(d.phantomReadyAt) ? d.phantomReadyAt : (Math.floor((d.gameT || 0) / PHANTOM_INTERVAL) + 1) * PHANTOM_INTERVAL;
@@ -3080,10 +3171,12 @@ function beginSpectate(d) {
     h.town = clamp(p.t | 0, 0, TOWNS); h.netAlive = !!p.alive; h.netT = now;
     h.phantomT = Number.isFinite(p.phantomT) ? clamp(p.phantomT, 0, PHANTOM_TIME) : 0;
   });
-  clk = d.clk || 0; gameT = d.gameT || 0; refillT = d.refillT || REFILL_TIME;
+  clk = d.clk || 0; gameT = d.gameT || 0; refillT = Number.isFinite(d.refillT) ? Math.max(0, d.refillT) : refillPeriod();
   player = holes.find(h => h.netAlive) || holes[0];
   state = 'play';
+  passengerGroups = new Map();
   loadTown(player.town);
+  if (Array.isArray(d.passengers)) for (const group of d.passengers) rememberPassengers(group);
   applyBusState(d.buses);
   camBase.set(player.x, 30, player.z + 30); camLook.set(player.x, 0, player.z);
   only('hud', 'quit');
