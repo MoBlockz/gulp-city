@@ -219,6 +219,7 @@ canvas{display:block;touch-action:none}
     <b>Classic:</b> one giant city, no levels · the game ends when the whole city is gulped<br>
     <b>Endless:</b> one giant city · everything returns every 15 minutes · keep your size and score<br>
     Daytime buses drop off people · buses give +20 bonus points · skyscrapers give +200<br>
+    <b>Dominance win:</b> stay at least 2× the next-biggest player's size for 5 seconds to win<br>
     🧲 Magnet &nbsp; ⚡ Speed &nbsp; ❄️ Freeze rivals &nbsp; ✨ Golden things = 5× points
     <br>👻 Phantom appears every 10 minutes: invisible, untouchable + eat any player for 60s
   </div>
@@ -1430,6 +1431,7 @@ const SHIELD_TIME = 12;
 const PHANTOM_TIME = 60, PHANTOM_INTERVAL = 600;
 const NORMAL_PU = ['magnet', 'speed', 'freeze', 'shield'];
 let phantomReadyAt = PHANTOM_INTERVAL;
+let phantomPickup = null;
 const puIconGeo = {
   phantom: merge([
     part(G.sph, 0xf4e8ff, [0, .15, 0], [.48, .55, .3]),
@@ -1465,6 +1467,7 @@ function spawnPU(type = pick(NORMAL_PU), x, z, id) {
   if (!PU[type]) return;
   if (x == null) [x, z] = roadPoint();
   if (id == null) id = (net.myId || 'sp') + ':' + (puSeq++);
+  if (type === 'phantom') phantomPickup = { id, t: town, ep: townEp[town], until: gameT + 120 };
   const icon = new THREE.Mesh(puIconGeo[type], puIconMat); icon.position.y = 1.4; icon.scale.setScalar(1.3);
   const glowMat = new THREE.MeshBasicMaterial({ color: PU[type].color, transparent: true, opacity: .55, blending: THREE.AdditiveBlending, depthWrite: false, fog: false });
   patchGround(glowMat);
@@ -1481,7 +1484,7 @@ function applyPU(h, p) {
   if (p.type === 'magnet') h.magnetT = 7;
   else if (p.type === 'speed') h.speedT = 6;
   else if (p.type === 'shield') h.shield = Math.max(h.shield, SHIELD_TIME);
-  else if (p.type === 'phantom') { h.phantomT = PHANTOM_TIME; h.frozenT = 0; }
+  else if (p.type === 'phantom') { h.phantomT = PHANTOM_TIME; h.frozenT = 0; phantomPickup = null; }
   else for (const o of holes) if (o !== h && o.alive && !(o.shield > 0) && !(o.phantomT > 0)) o.frozenT = 3;
   burst(p.x, 1.2, p.z, T.color, 30, 6, .45);
   if (state !== 'play') return;
@@ -1493,7 +1496,7 @@ function updatePhantomSpawn() {
     const slot = Math.floor(gameT / PHANTOM_INTERVAL);
     phantomReadyAt = (slot + 1) * PHANTOM_INTERVAL;
     const p = spawnPU('phantom', undefined, undefined, 'phantom-' + slot);
-    if (net.inGame) netSend('pu', { id: p.id, type: p.type, x: p.x, z: p.z, t: town, rareAt: phantomReadyAt });
+    if (net.inGame) netSend('pu', { id: p.id, type: p.type, x: p.x, z: p.z, t: town, ep: townEp[town], until: phantomPickup.until, rareAt: phantomReadyAt });
     banner('👻 PHANTOM HAS APPEARED!', '#d4b3ff', 2.5);
   }
 }
@@ -1520,6 +1523,7 @@ function updatePU(dt, time) {
     }
   }
   powerups = powerups.filter(p => {
+    if (p.dead && phantomPickup?.id === p.id) phantomPickup = null;
     if (p.dead) { scene.remove(p.grp); p.grp.children[2].geometry.dispose(); }
     return !p.dead;
   });
@@ -2233,6 +2237,10 @@ function updHUD() {
       `<span>${h.isPlayer ? 'YOU' : h.name}${h.alive ? '' : ' 💀'}${tip}</span><span class="sc">${classic ? '' : '🏙' + townOf(h) + ' · '}S${h.level + 1} · ${h.score.toLocaleString()}</span></div>`;
   }).join('');
   let chips = '';
+  if (dominanceNotice) {
+    const leader = holes.find(h => (h.pid || h.name) === dominanceNotice.id);
+    if (leader) chips += `<div class="chip" style="--c:#ffe66d">🏆 ${leader.name.replace(/[<>&]/g, '')} wins in ${Math.ceil(dominanceNotice.remaining)}s · catch up!</div>`;
+  }
   if (P.magnetT > 0) chips += `<div class="chip" style="--c:#ff4d4d">🧲 ${P.magnetT.toFixed(1)}</div>`;
   if (P.phantomT > 0) chips += `<div class="chip" style="--c:#d4b3ff">👻 INVISIBLE + UNTOUCHABLE ${Math.ceil(P.phantomT)}s</div>`;
   if (P.speedT > 0) chips += `<div class="chip" style="--c:#f5b800">⚡ ${P.speedT.toFixed(1)}</div>`;
@@ -2371,6 +2379,7 @@ function rerollRivals() {
 }
 function refillTown(t, ep, born = clk) {
   if (!(ep > townEp[t])) return;
+  if (phantomPickup?.t === t && phantomPickup.ep < ep) phantomPickup = null;
   townEp[t] = ep;
   townBorn[t] = born;
   if (t === town && state === 'play') {
@@ -2388,9 +2397,9 @@ function applyRefills(eps, born = clk) {
 function isRoomAuthority() {
   if (!net.inGame) return true;
   if (net.spec) return false;
-  let m = net.myId; for (const h of holes) if (h.remote && h.pid < m) m = h.pid;
-  return m === net.myId;
+  return roomAuthorityId() === net.myId;
 }
+function roomAuthorityId() { return holes.map(h => h.pid).filter(Boolean).sort()[0] || net.myId; }
 function updateClassic() {
   // last ~6% of the city: everything becomes edible and everyone speeds up, so every game can finish
   if (!frenzy && objects.length <= Math.max(25, totalObjs * .06)) {
@@ -2425,6 +2434,30 @@ function updateTowns(dt) {
   // big enough? on to the next town
   if (!net.spec && player.alive && town < TOWNS && player.growth >= townNeed(town + 1)) goToTown(town + 1);
 }
+const DOMINANCE_RATIO = 2, DOMINANCE_TIME = 5;
+let dominanceNotice = null, dominanceElapsed = 0;
+function resetDominance() { dominanceNotice = null; dominanceElapsed = 0; }
+function dominanceLeader() {
+  if (holes.length < 2 || holes.some(h => !(h.remote ? h.netAlive : h.alive) || h.dying || h.phantomT > 0 || h.boostT > 0 || h.shield > 0)) return null;
+  if (powerups.some(p => p.type === 'phantom' && !p.dead && p.t < p.life)) return null;
+  if (phantomPickup && phantomPickup.until > gameT) return null;
+  if (phantomReadyAt - gameT <= DOMINANCE_TIME) return null;
+  if (gameMode !== 'classic' && refillT <= DOMINANCE_TIME) return null;
+  if (holes.some(h => h.remote && performance.now() - h.netT > 2000)) return null;
+  const sizes = holes.map(h => ({ h, r: h.remote ? h.nR : Math.max(h.R, targetRadius(h)) })).sort((a, b) => b.r - a.r);
+  return sizes[0].r + 1e-6 >= sizes[1].r * DOMINANCE_RATIO ? sizes[0].h : null;
+}
+function updateDominance(dt) {
+  if (state !== 'play' || !isRoomAuthority()) return;
+  const leader = dominanceLeader();
+  if (!leader) { resetDominance(); return; }
+  const id = leader.pid || leader.name;
+  if (dominanceNotice?.id !== id) { dominanceElapsed = 0; dominanceNotice = { id, remaining: DOMINANCE_TIME }; }
+  dominanceElapsed += dt; dominanceNotice.remaining = Math.max(0, DOMINANCE_TIME - dominanceElapsed);
+  if (dominanceElapsed + 1e-7 < DOMINANCE_TIME) return;
+  if (net.inGame) netSend('end', { reason: 'dominance', id });
+  endGame('dominance', leader.name, id);
+}
 
 /* ---------------- colours ---------------- */
 let myColor = clamp(parseInt(localStorage.getItem('gulpcity_color') || '0', 10) || 0, 0, MP_COLORS.length - 1);
@@ -2458,7 +2491,8 @@ function spDefs() {
 
 function startGame(opts = {}) {
   initAudio();
-  releaseControls(); gameT = 0; clk = 0; phantomReadyAt = PHANTOM_INTERVAL;
+  resetDominance();
+  releaseControls(); gameT = 0; clk = 0; phantomReadyAt = PHANTOM_INTERVAL; phantomPickup = null;
   townEp = new Array(TOWNS + 1).fill(0); eatenBy = new Map();
   townBorn = new Array(TOWNS + 1).fill(0);
   passengerGroups = new Map();
@@ -2483,21 +2517,26 @@ function startGame(opts = {}) {
   updHUD(); drawMini(0);
   banner(gameMode === 'endless' ? '♾️ ENDLESS! THE CITY RETURNS EVERY 15 MINUTES!' : gameMode === 'classic' ? 'GULP THE WHOLE CITY!' : `🏙️ TOWN 1 of ${TOWNS} — GULP!`, '#ffe66d', 1.6); sfx.start();
 }
-function endGame(reason, winnerName) {
+function endGame(reason, winnerName, winnerId) {
   if (state !== 'play') return;
+  resetDominance();
   state = 'over'; overLock = true;
   touch.active = false; $('joy').classList.add('hidden');
   sfx.end();
   if (reason !== 'quit') lastGame = null;   // finished games can't be spectated
   const classic = gameMode !== 'towns';
-  const sorted = [...holes].sort((a, b) => (classic ? 0 : townOf(b) - townOf(a)) || b.score - a.score);
+  let sorted = [...holes].sort((a, b) => (classic ? 0 : townOf(b) - townOf(a)) || b.score - a.score);
+  const dominance = reason === 'dominance';
+  const winner = dominance ? holes.find(h => (h.pid || h.name) === winnerId) : null;
+  if (winner) sorted = [winner, ...sorted.filter(h => h !== winner)];
   const watching = !!net.spec;
   const me = watching ? (sorted[0] || null) : player;
   const best = watching ? getBest() : Math.max(getBest(), player.score); localStorage.setItem(bestKey, best);
-  $('overTitle').textContent = reason === 'win' ? 'YOU WIN!' : reason === 'eaten' ? 'CITY GULPED!' : 'GAME OVER';
+  $('overTitle').textContent = dominance ? (!watching && winner === player ? 'YOU WIN!' : `${winnerName || 'THE BIGGEST HOLE'} WINS!`) : reason === 'win' ? 'YOU WIN!' : reason === 'eaten' ? 'CITY GULPED!' : 'GAME OVER';
   const rank = sorted.indexOf(player) + 1, top = sorted[0];
   $('rankText').textContent =
-      classic ? (!top ? 'Everyone left the game' : watching ? `🏆 ${top.name} won!`
+      dominance ? `🏆 ${winnerName || 'The biggest hole'} wins at least twice the next-biggest player's size!`
+    : classic ? (!top ? 'Everyone left the game' : watching ? `🏆 ${top.name} won!`
         : rank === 1 ? '🏆 #1 — TOP GULPER OF THE CITY!' : `You finished #${rank} of ${holes.length} · ${top.name} won`)
     : reason === 'win' ? `🏆 You reached Town ${TOWNS} first!`
     : reason === 'lost' ? `🏆 ${winnerName || 'Someone'} reached Town ${TOWNS} and won!`
@@ -2510,7 +2549,7 @@ function endGame(reason, winnerName) {
   $('rBig').textContent = stats.biggest ? stats.biggest.label : '—';
   $('rBest').textContent = best.toLocaleString();
   $('againBtn').classList.toggle('hidden', mode === 'mp');
-  if (reason === 'win') { for (let i = 0; i < 6; i++) setTimeout(() => ringFX(player.x, player.z, player.R * (1 + i * .4), MP_COLORS[i * 3 % 20]), i * 120); sfx.levelUp(); }
+  if (reason === 'win' || (dominance && winner === player && !watching)) { for (let i = 0; i < 6; i++) setTimeout(() => ringFX(player.x, player.z, player.R * (1 + i * .4), MP_COLORS[i * 3 % 20]), i * 120); sfx.levelUp(); }
   if (mode === 'mp') netLeaveAll();
   setTimeout(() => { only('over'); overLock = false; }, reason === 'win' ? 1400 : 900);
 }
@@ -2522,6 +2561,7 @@ function menuWorld() {
   setHoles(spDefs()); loadTown(17); resetHoles(startsFor(holes.length));
 }
 function toMenu() {
+  resetDominance();
   releaseControls();
   netLeaveAll();
   state = 'menu'; menuWorld();
@@ -2562,7 +2602,7 @@ function updDash(dt) {
 $('dash').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); doDash(); });
 
 /* ---------------- problem log (see the script in <head>) ---------------- */
-const VERSION = '2026-11-24a';
+const VERSION = '2026-11-24b';
 window.__gcStarted = true;
 window.__gcCtx = () => ({
   player: localStorage.getItem('gulpcity_name') || '(no name)',
@@ -2611,7 +2651,7 @@ updBugBtn();
 
 /* ---------------- multiplayer ----------------
    Game messages travel over secure WebSockets through internet relays, so routers do not need to allow WebRTC.
-   - "lobby-v4" room: hosts advertise open games; seekers get asked "Join X's game?"
+   - "lobby-v5" room: hosts advertise open games; seekers get asked "Join X's game?"
    - "g-<code>" room: one game, up to 20 players. Host owns the roster and presses START.
    In-game each player is the authority for its own hole: it streams its position/size and what it ate. */
 const MQTT_URL = 'https://cdn.jsdelivr.net/npm/mqtt@5.10.4/dist/mqtt.esm.js';
@@ -2631,10 +2671,10 @@ function joinRelayRoom(config, roomId) {
   let resolveReady, rejectReady, heartbeat, connectTimer, wasOffline = false;
   const ready = new Promise((resolve, reject) => { resolveReady = resolve; rejectReady = reject; });
   // Room codes isolate games on the shared brokers; encrypt their contents with a room-specific key.
-  const roomSeed = config.appId + '/relay-v4/' + roomId;
+  const roomSeed = config.appId + '/relay-v5/' + roomId;
   const keyReady = Promise.all(['route/', 'data/'].map(domain =>
     crypto.subtle.digest('SHA-256', encoder.encode(domain + roomSeed)))).then(async ([routeHash, keyHash]) => ({
-    topic: 'gulpcity/v4/' + Array.from(new Uint8Array(routeHash), b => b.toString(16).padStart(2, '0')).join(''),
+    topic: 'gulpcity/v5/' + Array.from(new Uint8Array(routeHash), b => b.toString(16).padStart(2, '0')).join(''),
     key: await crypto.subtle.importKey('raw', keyHash, 'AES-GCM', false, ['encrypt', 'decrypt'])
   }));
   const online = () => clients.filter(c => c.live && c.client.connected);
@@ -2742,7 +2782,7 @@ function joinRelayRoom(config, roomId) {
 }
 const MAXP = 20;
 // ?lobby=xyz in the URL uses a separate private lobby (for testing without pulling in real players)
-const LOBBY_ROOM = 'lobby-v4' + ((new URLSearchParams(location.search).get('lobby') || '').replace(/[^a-z0-9]/gi, '').slice(0, 16).replace(/^(.)/, '-$1'));
+const LOBBY_ROOM = 'lobby-v5' + ((new URLSearchParams(location.search).get('lobby') || '').replace(/[^a-z0-9]/gi, '').slice(0, 16).replace(/^(.)/, '-$1'));
 const net = { lib: null, lobby: null, room: null, myId: null, inGame: false, isHost: false, started: false, myCode: null, gameCode: null,
   name: 'Player', hostName: '', ads: new Map(), declined: new Set(), roster: [], hostPeer: null, prompt: null,
   adTimer: 0, seekTimer: 0, A: {}, LA: {}, stT: 0, eaten: [], createdAt: 0, gen: 0, spec: null, snap: null };
@@ -2925,6 +2965,7 @@ function wireRoom(room, code) {
     if (!net.inGame || !d) return;
     if (Number.isFinite(d.rareAt)) phantomReadyAt = Math.max(phantomReadyAt, d.rareAt);
     if (d.t === town && !powerups.some(p => p.id === d.id)) spawnPU(d.type, d.x, d.z, d.id);
+    if (d.type === 'phantom') phantomPickup = { id: d.id, t: d.t, ep: d.ep ?? townEp[d.t], until: Number.isFinite(d.until) ? d.until : gameT + 120 };
   });
   net.A.refill.onMessage(d => { if (!net.inGame || !d) return; const born = Number.isFinite(d.born) ? d.born : clk;
     if (d.eps) applyRefills(d.eps, born); else if (d.t >= 0 && d.t <= TOWNS) refillTown(d.t, d.ep | 0, born); });
@@ -2934,8 +2975,16 @@ function wireRoom(room, code) {
     p.c = freeColor(d.c | 0, peerId); sendRoster(); renderLobby();
   });
   net.A.pick.onMessage(onPick);
-  net.A.end.onMessage(d => {
-    if (!net.inGame || state !== 'play' || gameMode === 'endless') return;
+  net.A.end.onMessage((d, { peerId }) => {
+    if (!net.inGame || state !== 'play') return;
+    if (d?.reason === 'dominance') {
+      if (peerId === roomAuthorityId() && typeof d.id === 'string') {
+        const winner = holes.find(h => h.pid === d.id);
+        if (winner) endGame('dominance', winner.name, d.id);
+      }
+      return;
+    }
+    if (gameMode === 'endless') return;
     if (gameMode === 'classic') endGame('eaten'); else endGame('lost', d && typeof d.name === 'string' ? d.name.slice(0, 14) : '');
   });
   net.A.mode.onMessage((d, { peerId }) => { if (peerId === net.hostPeer && d && MODE_NAMES[d.m]) { net.lobbyMode = d.m; renderLobby(); } });
@@ -3053,7 +3102,7 @@ function netState() {
   // Eating must arrive even when a newer movement packet overtakes an older one.
   if (net.eaten.length) netSend('ate', { t: town, ep: townEp[town], born: townBorn[town], e: net.eaten.splice(0) });
   netSend('st', { p: [r2(p.x), r2(p.z), r2(p.vx), r2(p.vz), r2(p.R), p.growth, p.level, p.score], f, lv: p.lv, a: p.alive ? 1 : 0,
-    t: town, ep: townEp[town], born: townBorn[town], gh: r2(p.phantomT), rareAt: phantomReadyAt, b: busAuthority() === net.myId ? busState() : undefined });
+    t: town, ep: townEp[town], born: townBorn[town], gh: r2(p.phantomT), rareAt: phantomReadyAt, dom: isRoomAuthority() ? dominanceNotice : undefined, b: busAuthority() === net.myId ? busState() : undefined });
 }
 function onState(d, { peerId }) {
   const h = holeByPid(peerId);
@@ -3061,6 +3110,10 @@ function onState(d, { peerId }) {
   const [x, z, vx, vz, R, growth, level, score] = d.p;
   h.nx = x; h.nz = z; h.nvx = vx; h.nvz = vz; h.nR = R; h.growth = growth; h.level = level; h.score = score; h.lv = d.lv;
   h.netT = performance.now();
+  if (peerId === roomAuthorityId()) {
+    dominanceNotice = d.dom && typeof d.dom.id === 'string' && Number.isFinite(d.dom.remaining)
+      ? { id: d.dom.id, remaining: clamp(d.dom.remaining, 0, DOMINANCE_TIME) } : null;
+  }
   h.phantomT = Number.isFinite(d.gh) ? clamp(d.gh, 0, PHANTOM_TIME) : 0;
   if (Number.isFinite(d.rareAt)) phantomReadyAt = Math.max(phantomReadyAt, d.rareAt);
   h.frozenT = d.f & 1 ? .3 : 0; h.speedT = d.f & 2 ? .3 : 0; h.magnetT = d.f & 4 ? .3 : 0; h.shield = d.f & 8 ? .3 : 0;
@@ -3109,7 +3162,10 @@ function onPick(d, { peerId }) {
   const p = powerups.find(q => q.id === d.id);
   if (p && !p.dead) { p.dead = true; burst(p.x, 1.2, p.z, PU[p.type].color, 30, 6, .45); }
   const h = holeByPid(peerId);
-  if (d.type === 'phantom' && h) { h.phantomT = PHANTOM_TIME; h.frozenT = 0; }
+  if (d.type === 'phantom') {
+    phantomPickup = null;
+    if (h) { h.phantomT = PHANTOM_TIME; h.frozenT = 0; }
+  }
   if (d.type === 'freeze' && d.t === town && !net.spec && player.alive && state === 'play' && player.phantomT > 0) {
     banner('👻 PHANTOM BLOCKED FREEZE!', '#d4b3ff', 1.3); return;
   }
@@ -3124,7 +3180,7 @@ function onPick(d, { peerId }) {
 function makeSnap() {
   const eaten = {};
   for (const [k, set] of eatenBy) eaten[k] = [...set];
-  return { seed: baseSeed, clk, gameT, townEp, townBorn, eaten, refillT, mode: gameMode, frenzy, phantomReadyAt, buses: busState(), passengers: passengerSnapshot(),
+  return { seed: baseSeed, clk, gameT, townEp, townBorn, eaten, refillT, mode: gameMode, frenzy, phantomReadyAt, phantomPickup, buses: busState(), passengers: passengerSnapshot(),
     holes: holes.map(h => ({ pid: h.isPlayer ? net.myId : h.pid, name: h.name, c: h.baseColor.getHex(), x: r2(h.isPlayer ? h.x : h.nx), z: r2(h.isPlayer ? h.z : h.nz),
       R: r2(h.R), level: h.level, score: h.score, growth: h.growth, phantomT: h.phantomT, alive: (h.isPlayer ? h.alive : h.netAlive) ? 1 : 0, lv: h.lv, t: townOf(h) })),
     pus: powerups.filter(p => !p.dead).map(p => ({ id: p.id, type: p.type, x: p.x, z: p.z })) };
@@ -3161,6 +3217,7 @@ function beginSpectate(d) {
   townEp = Array.isArray(d.townEp) ? d.townEp.slice(0, TOWNS + 1).map(v => v | 0) : new Array(TOWNS + 1).fill(0);
   townBorn = Array.from({ length: TOWNS + 1 }, (_, t) => Number.isFinite(d.townBorn?.[t]) ? d.townBorn[t] : 0);
   phantomReadyAt = Number.isFinite(d.phantomReadyAt) ? d.phantomReadyAt : (Math.floor((d.gameT || 0) / PHANTOM_INTERVAL) + 1) * PHANTOM_INTERVAL;
+  phantomPickup = d.phantomPickup && Number.isFinite(d.phantomPickup.until) ? d.phantomPickup : null;
   while (townEp.length < TOWNS + 1) townEp.push(0);
   eatenBy = new Map(); for (const k in d.eaten || {}) eatenBy.set(k, new Set(d.eaten[k]));
   setHoles(d.holes.map(p => ({ name: p.name, color: p.c, remote: true, pid: p.pid })));
@@ -3255,6 +3312,7 @@ function step(dt, time) {
     if (net.inGame && !net.spec) netTick(dt);
     updateTowns(dt);
     updatePhantomSpawn();
+    updateDominance(dt);
   }
   // tiny props far from the action aren't worth drawing once you're huge
   lodT -= dt;
