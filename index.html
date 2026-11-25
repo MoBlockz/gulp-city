@@ -217,7 +217,7 @@ canvas{display:block;touch-action:none}
     Eat things smaller than you: cones → people → cars → trees → houses → skyscrapers → the 2000 ft tower<br>
     <b>20 Towns:</b> grow big enough to move up to a bigger town · reach Town 20 to win<br>
     <b>Classic:</b> one giant city, no levels · the game ends when the whole city is gulped<br>
-    <b>Endless:</b> one giant city · everything returns every 15 minutes · keep your size and score<br>
+    <b>Endless:</b> the city rebuilds over 2 minutes, starting every 15 minutes · keep your size and score<br>
     Daytime buses drop off people · buses give +20 bonus points · skyscrapers give +200<br>
     <b>Dominance win:</b> stay at least 2× the next-biggest player's size for 5 seconds to win<br>
     🧲 Magnet &nbsp; ⚡ Speed &nbsp; ❄️ Freeze rivals &nbsp; ✨ Golden things = 5× points
@@ -1095,7 +1095,7 @@ function addBusStop(site, id) {
   const o = spawn('busStop', x, z, rotation, null, id);
   o.stop = { ...site, lane: site.road - site.dir * 2 };
   busStops.push(o);
-  if (!objects.some(b => b.kind === 'bus' && b.state === 'idle' && b.move?.axis === site.axis && b.move.dir === site.dir &&
+  if (!objects.some(b => b.kind === 'bus' && (b.state === 'idle' || b.state === 'queued') && b.move?.axis === site.axis && b.move.dir === site.dir &&
       (site.axis === 'x' ? b.z : b.x) === o.stop.lane)) {
     const busId = 'bus-for-' + id;
     if (!eatenBy.get(townKey(town, townEp[town]))?.has(busId))
@@ -2226,7 +2226,9 @@ function updHUD() {
   const pct = Math.floor((1 - objects.length / totalObjs) * 100);
   const classic = gameMode !== 'towns';
   const nextPct = town >= TOWNS ? 100 : Math.floor(clamp((P.growth - townNeed(town)) / (townNeed(town + 1) - townNeed(town)), 0, 1) * 100);
-  if (classic) $('timer').innerHTML = `${dayIcon} ${fmtT(gameT)}<small>${gameMode === 'endless' ? 'REBUILDS IN ' + fmtT(Math.max(0, refillT)) + ' · ' : ''}${pct}% OF THE CITY GULPED · ${objects.length.toLocaleString()} LEFT</small>`;
+  if (classic) $('timer').innerHTML = `${dayIcon} ${fmtT(gameT)}<small>${isEndlessRebuilding()
+    ? '🏗️ REBUILDING · ' + fmtT(Math.ceil(endlessRebuildRemaining())) + ' · ' + Math.floor((1 - endlessRebuildRemaining() / ENDLESS_BUILD_TIME) * 100) + '% COMPLETE'
+    : (gameMode === 'endless' ? 'REBUILDS IN ' + fmtT(Math.max(0, refillT)) + ' · ' : '') + pct + '% OF THE CITY GULPED · ' + objects.length.toLocaleString() + ' LEFT'}</small>`;
   else $('timer').innerHTML = `🏙️ TOWN ${town}/${TOWNS} · ${dayIcon} ${fmtT(gameT)}<small>NEXT TOWN ${nextPct}% · ${pct}% EATEN · REBUILDS IN ${fmtT(Math.max(0, refillT))}</small>`;
   const sorted = [...holes].sort((a, b) => (classic ? 0 : townOf(b) - townOf(a)) || b.score - a.score);
   let show = sorted.slice(0, 6);
@@ -2237,7 +2239,7 @@ function updHUD() {
       `<span>${h.isPlayer ? 'YOU' : h.name}${h.alive ? '' : ' 💀'}${tip}</span><span class="sc">${classic ? '' : '🏙' + townOf(h) + ' · '}S${h.level + 1} · ${h.score.toLocaleString()}</span></div>`;
   }).join('');
   let chips = '';
-  if (dominanceNotice) {
+  if (dominanceNotice && !isEndlessRebuilding()) {
     const leader = holes.find(h => (h.pid || h.name) === dominanceNotice.id);
     if (leader) chips += `<div class="chip" style="--c:#ffe66d">🏆 ${leader.name.replace(/[<>&]/g, '')} wins in ${Math.ceil(dominanceNotice.remaining)}s · catch up!</div>`;
   }
@@ -2259,7 +2261,7 @@ function drawMini(time) {
     const s = o.r > 2.5 ? 3 : o.r > 1 ? 2 : 1;
     miniG.fillRect(M(o.x) - s / 2, M(o.z) - s / 2, s, s);
   }
-  if (giantObj) {
+  if (giantObj && giantObj.state === 'idle') {
     miniG.font = 'bold 15px sans-serif'; miniG.textAlign = 'center'; miniG.textBaseline = 'middle';
     miniG.fillStyle = '#2a1a5e'; miniG.fillText('★', M(giantObj.x) + 1, M(giantObj.z) + 1);
     miniG.fillStyle = '#ffd23f'; miniG.fillText('★', M(giantObj.x), M(giantObj.z));
@@ -2291,6 +2293,7 @@ function only(...ids) { for (const s of screens) $(s).classList.toggle('hidden',
 
 let clearing = false;
 function clearWorld() {
+  rebuildQueue = []; rebuildCursor = 0;
   clearing = true;
   for (const o of objects) if (o.state !== 'gone') removeObj(o);
   clearing = false;
@@ -2308,6 +2311,34 @@ function clearWorld() {
    nearly eaten. Everyone remembers what was eaten in each town+epoch, so arriving players see the same state. */
 const REFILL_TIME = 600;
 const ENDLESS_REFILL_TIME = 900;
+const ENDLESS_BUILD_TIME = 120;
+let rebuildQueue = [], rebuildCursor = 0;
+function endlessRebuildRemaining() {
+  return gameMode === 'endless' && town === 0 && townEp[0] > 0 ? clamp(townBorn[0] + ENDLESS_BUILD_TIME - clk, 0, ENDLESS_BUILD_TIME) : 0;
+}
+function isEndlessRebuilding() { return endlessRebuildRemaining() > 0; }
+function prepareEndlessRebuild() {
+  rebuildQueue = []; rebuildCursor = 0;
+  if (gameMode !== 'endless' || town !== 0 || townEp[0] === 0) return;
+  for (const o of objects) {
+    let hash = townSeed(0, townEp[0]);
+    for (const ch of String(o.id)) hash = Math.imul(hash ^ ch.charCodeAt(0), 16777619);
+    const col = clamp(Math.floor((o.x + CITY) / (CITY * 2) * NB), 0, NB - 1);
+    const row = clamp(Math.floor((o.z + CITY) / (CITY * 2) * NB), 0, NB - 1);
+    o.rebuildAt = townBorn[0] + (row * NB + col + (hash >>> 0) / 4294967296) / (NB * NB) * ENDLESS_BUILD_TIME;
+    if (o.rebuildAt > clk) { o.state = 'queued'; o.grp.visible = false; rebuildQueue.push(o); }
+  }
+  rebuildQueue.sort((a, b) => a.rebuildAt - b.rebuildAt);
+}
+function updateEndlessRebuild() {
+  while (rebuildCursor < rebuildQueue.length && rebuildQueue[rebuildCursor].rebuildAt <= clk + 1e-7) {
+    const o = rebuildQueue[rebuildCursor++];
+    if (o.state !== 'queued') continue;
+    if (eatenBy.get(townKey(town, townEp[town]))?.has(o.id)) { removeObj(o); continue; }
+    o.state = 'idle'; o.grp.visible = true;
+  }
+  if (rebuildCursor === rebuildQueue.length) { rebuildQueue = []; rebuildCursor = 0; }
+}
 const refillPeriod = () => gameMode === 'endless' ? ENDLESS_REFILL_TIME : REFILL_TIME;
 let town = 1, townEp = new Array(TOWNS + 1).fill(0), townBorn = new Array(TOWNS + 1).fill(0), eatenBy = new Map(), baseSeed = 1, refillT = REFILL_TIME, earlyRefillT = 0;
 const townKey = (t, ep) => t + ':' + ep;
@@ -2319,6 +2350,7 @@ function loadTown(t) {
   setDims(TOWN_NB[t] || 11); resizeGround();
   town = t;
   withRandom(mulberry32(townSeed(t, townEp[t])), () => genTown(t));
+  prepareEndlessRebuild();
   updateBusStops();
   const gone = eatenBy.get(townKey(t, townEp[t]));
   if (gone) {
@@ -2385,7 +2417,8 @@ function refillTown(t, ep, born = clk) {
   if (t === town && state === 'play') {
     if (gameMode === 'endless') frenzy = false;
     loadTown(town);
-    banner('🏗️ THE TOWN HAS BEEN REBUILT!', '#9be7ff', 2);
+    if (gameMode === 'endless') resetDominance();
+    banner(gameMode === 'endless' ? '🏗️ REBUILDING THE CITY — 2 MINUTES!' : '🏗️ THE TOWN HAS BEEN REBUILT!', '#9be7ff', 2);
     for (const h of holes) if (h.alive) ringFX(h.x, h.z, h.R, h.baseColor);
   }
 }
@@ -2410,7 +2443,8 @@ function updateClassic() {
 function updateTowns(dt) {
   if (gameMode === 'classic') { updateClassic(); return; }
   if (gameMode === 'endless') {
-    updateClassic(); refillT = Math.max(0, refillT - dt);
+    if (!isEndlessRebuilding()) updateClassic();
+    refillT = Math.max(0, refillT - dt);
     if (refillT <= 0 && isRoomAuthority()) {
       const eps = townEp.map((e, t) => t === 0 ? e + 1 : e);
       applyRefills(eps); if (net.inGame) netSend('refill', { eps, born: clk });
@@ -2438,6 +2472,7 @@ const DOMINANCE_RATIO = 2, DOMINANCE_TIME = 5;
 let dominanceNotice = null, dominanceElapsed = 0;
 function resetDominance() { dominanceNotice = null; dominanceElapsed = 0; }
 function dominanceLeader() {
+  if (isEndlessRebuilding()) return null;
   if (holes.length < 2 || holes.some(h => !(h.remote ? h.netAlive : h.alive) || h.dying || h.phantomT > 0 || h.boostT > 0 || h.shield > 0)) return null;
   if (powerups.some(p => p.type === 'phantom' && !p.dead && p.t < p.life)) return null;
   if (phantomPickup && phantomPickup.until > gameT) return null;
@@ -2471,7 +2506,7 @@ function renderSwatches(el, mine, taken, onPick) {
 function renderModes(el, cur, onPick) {
   el.innerHTML = Object.keys(MODE_NAMES).map(m =>
     `<button class="mode${m === cur ? ' on' : ''}" data-m="${m}" ${onPick ? '' : 'disabled'}>${MODE_NAMES[m]}<small>${m === 'towns'
-      ? 'Grow to move up · reach Town 20 to win' : m === 'endless' ? 'City respawns every 15 minutes' : 'One giant city · eat it all'}</small></button>`).join('');
+      ? 'Grow to move up · reach Town 20 to win' : m === 'endless' ? '15-minute cycles · 2-minute rebuilds' : 'One giant city · eat it all'}</small></button>`).join('');
   el.onclick = e => { const b = e.target.closest('.mode'); if (b && onPick) onPick(b.dataset.m); };
 }
 function showSpModes() { renderModes($('spModes'), modePref, m => { modePref = m; localStorage.setItem('gulpcity_mode', m); showSpModes(); }); }
@@ -2602,7 +2637,7 @@ function updDash(dt) {
 $('dash').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); doDash(); });
 
 /* ---------------- problem log (see the script in <head>) ---------------- */
-const VERSION = '2026-11-24b';
+const VERSION = '2026-11-25a';
 window.__gcStarted = true;
 window.__gcCtx = () => ({
   player: localStorage.getItem('gulpcity_name') || '(no name)',
@@ -2651,7 +2686,7 @@ updBugBtn();
 
 /* ---------------- multiplayer ----------------
    Game messages travel over secure WebSockets through internet relays, so routers do not need to allow WebRTC.
-   - "lobby-v5" room: hosts advertise open games; seekers get asked "Join X's game?"
+   - "lobby-v6" room: hosts advertise open games; seekers get asked "Join X's game?"
    - "g-<code>" room: one game, up to 20 players. Host owns the roster and presses START.
    In-game each player is the authority for its own hole: it streams its position/size and what it ate. */
 const MQTT_URL = 'https://cdn.jsdelivr.net/npm/mqtt@5.10.4/dist/mqtt.esm.js';
@@ -2671,10 +2706,10 @@ function joinRelayRoom(config, roomId) {
   let resolveReady, rejectReady, heartbeat, connectTimer, wasOffline = false;
   const ready = new Promise((resolve, reject) => { resolveReady = resolve; rejectReady = reject; });
   // Room codes isolate games on the shared brokers; encrypt their contents with a room-specific key.
-  const roomSeed = config.appId + '/relay-v5/' + roomId;
+  const roomSeed = config.appId + '/relay-v6/' + roomId;
   const keyReady = Promise.all(['route/', 'data/'].map(domain =>
     crypto.subtle.digest('SHA-256', encoder.encode(domain + roomSeed)))).then(async ([routeHash, keyHash]) => ({
-    topic: 'gulpcity/v5/' + Array.from(new Uint8Array(routeHash), b => b.toString(16).padStart(2, '0')).join(''),
+    topic: 'gulpcity/v6/' + Array.from(new Uint8Array(routeHash), b => b.toString(16).padStart(2, '0')).join(''),
     key: await crypto.subtle.importKey('raw', keyHash, 'AES-GCM', false, ['encrypt', 'decrypt'])
   }));
   const online = () => clients.filter(c => c.live && c.client.connected);
@@ -2782,7 +2817,7 @@ function joinRelayRoom(config, roomId) {
 }
 const MAXP = 20;
 // ?lobby=xyz in the URL uses a separate private lobby (for testing without pulling in real players)
-const LOBBY_ROOM = 'lobby-v5' + ((new URLSearchParams(location.search).get('lobby') || '').replace(/[^a-z0-9]/gi, '').slice(0, 16).replace(/^(.)/, '-$1'));
+const LOBBY_ROOM = 'lobby-v6' + ((new URLSearchParams(location.search).get('lobby') || '').replace(/[^a-z0-9]/gi, '').slice(0, 16).replace(/^(.)/, '-$1'));
 const net = { lib: null, lobby: null, room: null, myId: null, inGame: false, isHost: false, started: false, myCode: null, gameCode: null,
   name: 'Player', hostName: '', ads: new Map(), declined: new Set(), roster: [], hostPeer: null, prompt: null,
   adTimer: 0, seekTimer: 0, A: {}, LA: {}, stT: 0, eaten: [], createdAt: 0, gen: 0, spec: null, snap: null };
@@ -3135,7 +3170,9 @@ function onEaten(d, h) {
   if (t !== town) return;
   for (const id of d.e) {
     const o = objById.get(id);
-    if (!o || o.state !== 'idle') continue;
+    if (!o) continue;
+    if (o.state === 'queued') { removeObj(o); continue; }
+    if (o.state !== 'idle') continue;
     if (h.alive && Math.hypot(o.x - h.x, o.z - h.z) < h.R * 1.6 + 3) startFall(o, h);
     else { burst(o.x, .5, o.z, o.color, 8, 3, .3); removeObj(o); }
   }
@@ -3294,6 +3331,7 @@ function step(dt, time) {
   if (state === 'play') gameT += dt;
   setDay(state === 'menu' || state === 'lobby' ? .55 + .35 * Math.sin(time * .08) : (gameT / 300) % 1, dt);  // a day every 5 minutes
   if (sim) {
+    updateEndlessRebuild();
     updateBusStops();
     updateHoles(dt, time);
     updateObjects(dt, time);

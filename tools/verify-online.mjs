@@ -79,6 +79,67 @@ async function browser(label) {
 async function verify() {
 try {
   let a = await browser('host');
+  if (process.argv.includes('--rebuild-only')) {
+    await a.T(`startGame({mode:'endless'}); player.score=123; player.growth=1300; player.level=4; player.R=3.2;`);
+    assert.equal(await a.T('objects.some(o=>o.state==="queued")'),false,'initial Endless city starts fully built');
+    await a.T('clk=900; gameT=900; refillT=0; updateTowns(0)');
+    const planned=await a.T('objects.length');
+    assert.ok(await a.T('objects.filter(o=>o.state==="queued").length') > planned*.9,'scheduled rebuild does not restore the city instantly');
+    assert.equal(await a.T('objects.filter(o=>o.state==="queued").every(o=>!o.grp.visible)'),true,'unfinished objects are hidden');
+    await a.T(`window.__futureObject=objects.find(o=>o.state==='queued'&&Number.isInteger(o.id)&&o.r>5);
+      player.x=__futureObject.x; player.z=__futureObject.z; window.__beforePosition=[player.x,player.z]; updateObjects(.01,0);`);
+    assert.deepEqual(await a.T('[player.x,player.z]'),await a.evaluate('window.__beforePosition'),'unfinished buildings do not block the player');
+    const eatenId=await a.evaluate('window.__futureObject.id');
+    await a.T(`onEaten({t:0,ep:townEp[0],e:[${JSON.stringify(eatenId)}]},holes[1])`);
+    await a.T('clk=930; gameT=930; updateTowns(30); updateEndlessRebuild()');
+    const quarter=await a.T('objects.filter(o=>o.state==="idle").length');
+    assert.ok(quarter>0&&quarter<planned,'part of the city has returned after thirty seconds');
+    await a.T('clk=960; gameT=960; updateTowns(30); updateEndlessRebuild(); phantomReadyAt=2000; updateDominance(10)');
+    const half=await a.T('objects.filter(o=>o.state==="idle").length');
+    assert.ok(half>quarter&&half<planned,'more of the city has returned after one minute');
+    assert.equal(await a.T('state'), 'play','dominance cannot end the round while the city is rebuilding');
+    await a.T('updHUD()');
+    assert.equal(await a.evaluate('document.getElementById("timer").textContent.includes("REBUILDING")'),true,'HUD shows active rebuilding');
+    const visible=await a.T('objects.filter(o=>Number.isInteger(o.id)&&o.state==="idle").map(o=>o.id).sort((a,b)=>a-b)');
+    await a.T('window.__rebuildSnapshot=makeSnap(); beginSpectate(window.__rebuildSnapshot)');
+    assert.deepEqual(await a.T('objects.filter(o=>Number.isInteger(o.id)&&o.state==="idle").map(o=>o.id).sort((a,b)=>a-b)'),visible,
+      'spectator joining halfway through sees the same partially rebuilt city');
+    await a.T('clk=1020; gameT=1020; updateTowns(60); updateEndlessRebuild()');
+    assert.equal(await a.T('objects.some(o=>o.state==="queued")'),false,'all city objects are ready by two minutes');
+    assert.equal(await a.T('isEndlessRebuilding()'),false,'rebuild countdown finishes at two minutes');
+    assert.equal(await a.T(`objById.has(${JSON.stringify(eatenId)})`),false,'a swallowed object cannot reappear later in the same rebuild');
+    assert.equal(await a.T('player.score===123&&player.growth===1300&&player.R===3.2'),true,'gradual rebuild preserves score and size');
+    assert.deepEqual(a.errors,[]); a.close(); a=await browser('normal-rebuild');
+    await a.T(`startGame({mode:'towns'}); refillTown(1,1)`);
+    assert.equal(await a.T('objects.some(o=>o.state==="queued")'),false,'20 Towns keeps its existing instant rebuild');
+    assert.deepEqual(a.errors,[]); a.close(); a=await browser('rebuild-host');
+    const b=await browser('rebuild-guest');
+    await a.T(`$('mpBtn').click(); $('mpName').value='Builder'; $('mpGo').click()`);
+    await until(()=>a.T('net.isHost&&net.roster.length===1'),'rebuild host online',35000);
+    const code=await a.T('net.gameCode');
+    await b.T(`$('mpBtn').click(); $('mpName').value='Friend'; $('mpCodeIn').value=${JSON.stringify(code)}; $('mpCodeGo').click()`);
+    await until(()=>a.T('net.roster.length===2'),'rebuild guest joined');
+    await until(()=>b.T('net.roster.length===2'),'rebuild roster synchronised');
+    await a.T(`$('mpModes').querySelector('[data-m="endless"]').click(); $('mpStart').click()`);
+    await until(()=>b.T('state==="play"'),'Endless rebuild round started');
+    const authority=await a.T('isRoomAuthority()')?a:b, follower=authority===a?b:a;
+    await a.T('clk=900;gameT=900'); await b.T('clk=900;gameT=900');
+    await authority.T('refillT=0;updateTowns(0)');
+    await until(()=>follower.T('townEp[0]===1'),'gradual rebuild started on both devices');
+    const signature='objects.filter(o=>Number.isInteger(o.id)&&o.state==="idle").map(o=>o.id).sort((a,b)=>a-b)';
+    assert.equal(await follower.T('isEndlessRebuilding()&&objects.some(o=>o.state==="queued")'),true,'guest does not rebuild everything instantly');
+    const futureId=await authority.T('objects.find(o=>o.state==="queued"&&Number.isInteger(o.id)).id');
+    await authority.T(`removeObj(objById.get(${JSON.stringify(futureId)})); net.eaten.push(${JSON.stringify(futureId)});netState()`);
+    await until(()=>follower.T(`!objById.has(${JSON.stringify(futureId)})`),'queued-object swallow synchronised');
+    for(const seconds of [30,60,120]) {
+      for(const session of [a,b]) await session.T(`clk=${900+seconds};gameT=${900+seconds};updateEndlessRebuild()`);
+      assert.deepEqual(await a.T(signature),await b.T(signature),'both players see the same rebuilt objects at '+seconds+' seconds');
+    }
+    assert.equal(await a.T('objects.some(o=>o.state==="queued")'),false,'host completes reconstruction in two minutes');
+    assert.equal(await b.T('objects.some(o=>o.state==="queued")'),false,'guest completes reconstruction in two minutes');
+    assert.deepEqual(a.errors,[]);assert.deepEqual(b.errors,[]);
+    console.log('PASS gradual rebuild timing, collisions, consumed objects, snapshots, normal modes, and multiplayer'); return;
+  }
   if (process.argv.includes('--victory-only')) {
     await a.T(`startGame({mode:'endless'}); setHoles([{name:'Big One',player:true,color:0x8a5cff},{name:'Rival',color:0xff4f9a}]);
       resetHoles([[0,0],[20,20]]); player.R=1.299; holes[1].R=.65;`);
