@@ -12,6 +12,7 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const html = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'gulp-online-'));
 const browsers = [], sockets = [], sessions = [];
+const stopBrowser = proc => { if (proc.exitCode === null && !proc.killed) proc.kill(); };
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const until = async (check, label, timeout = 30000) => {
   const deadline = Date.now() + timeout;
@@ -71,7 +72,7 @@ async function browser(label) {
     } };` : ''}` });
   await send('Page.navigate', { url: testUrl });
   await until(() => evaluate('typeof window.__t === "function"'), label + ' game loaded', 30000);
-  const session = { send, evaluate, errors, close: () => { ws.close(); proc.kill(); }, T: c => evaluate('window.__t(' + JSON.stringify(c) + ')').catch(e => {
+  const session = { send, evaluate, errors, close: () => { ws.close(); stopBrowser(proc); }, T: c => evaluate('window.__t(' + JSON.stringify(c) + ')').catch(e => {
     throw new Error(e.message + '\nIn ' + label + ', while evaluating: ' + c.slice(0, 220));
   }) };
   sessions.push(session); return session;
@@ -79,6 +80,83 @@ async function browser(label) {
 async function verify() {
 try {
   let a = await browser('host');
+  if (process.argv.includes('--polish-probe') || process.argv.includes('--polish-only')) {
+    await a.T(`startGame(); window.__fixture=(n=1)=>{clearWorld();
+      setHoles(Array.from({length:n},(_,i)=>({name:'Test '+i,player:i===0,color:i?0xff4f9a:0x8a5cff})));
+      resetHoles(Array.from({length:n},()=>[0,0])); frenzy=false; releaseControls();};`);
+    const results={};
+    results.objectOverlap=await a.T(`__fixture(); spawn('house',0,0); updateObjects(1/60,0); Math.hypot(player.x,player.z)`);
+    results.holeOverlap=await a.T(`__fixture(2); holeVsHole(); Math.hypot(player.x-holes[1].x,player.z-holes[1].z)`);
+    results.wallVelocity=await a.T(`__fixture(); spawn('house',0,0); player.x=2.9; player.vx=-5; player.vz=3;
+      updateObjects(1/60,0); [player.vx,player.vz]`);
+    results.dashThroughBuilding=await a.T(`__fixture(); spawn('house',0,0); player.prevX=-5; player.prevZ=0;
+      player.x=5; player.vx=20; updateObjects(.05,0); player.x`);
+    results.missedFood=await a.T(`__fixture(); const o=spawn('cone',0,0); player.prevX=-2; player.prevZ=0;
+      player.x=2; updateObjects(.05,0); o.state`);
+    results.freezeMovement=await a.T(`__fixture(); player.frozenT=3; player.vx=6; updateHoles(.05,0); player.x`);
+    results.remotePush=await a.T(`__fixture(2); spawn('house',0,0); player.x=20; holes[1].remote=true;
+      holes[1].x=2.9; updateObjects(1/60,0); holes[1].x`);
+    console.log('PHYSICS PROBE',JSON.stringify(results));
+    if (process.argv.includes('--polish-probe')) return;
+    assert.ok(results.objectOverlap>2.9,'hole escapes an exact building overlap');
+    assert.ok(results.holeOverlap>1,'coincident holes separate without NaNs');
+    assert.deepEqual(results.wallVelocity,[0,3],'wall removes inward velocity while preserving sliding');
+    assert.ok(results.dashThroughBuilding<-2.9,'fast movement cannot tunnel through buildings');
+    assert.equal(results.missedFood,'fall','fast movement catches small food along its path');
+    assert.equal(results.freezeMovement,0,'Freeze stops existing momentum');
+    assert.equal(results.remotePush,2.9,'remote positions remain controlled by their owner');
+    assert.equal(await a.T(`__fixture(); spawn('house',0,0); const food=spawn('cone',4,0);
+      player.prevX=-5; player.x=5; updateObjects(.05,0); food.state`),'idle','food behind a blocking building is not swallowed');
+    assert.deepEqual(await a.T(`__fixture(); player.x=HALF+1; player.vx=5; player.vz=3; clampHole(player);
+      [player.x===HALF,player.vx,player.vz]`),[true,0,3],'map edges stop outward momentum and retain tangent movement');
+    assert.equal(await a.T(`__fixture(); player.frozenT=3; dashCd=0; doDash(); player.frozenT===0&&dashCd>0`),true,'Dash still breaks a freeze');
+    for(const kind of ['cone','house','giant']) {
+      const fall=await a.T(`__fixture(); window.__fall=spawn(${JSON.stringify(kind)},0,0); frenzy=true;
+        startFall(__fall,player); let seconds=0; while(__fall.state!=='gone'&&seconds<15){updateFall(__fall,.025);seconds+=.025;}
+        __fall.grp.updateMatrixWorld(true); ({gone:__fall.state==='gone',top:new THREE.Box3().setFromObject(__fall.grp).max.y,
+          narrowed:__fall.r<=player.R*EAT||__fall.grp.scale.x<1,score:player.score,expected:objectPoints(__fall)})`);
+      assert.equal(fall.gone,true,kind+' finishes falling');
+      assert.ok(fall.top<0,kind+' passes completely below the ground before disappearing');
+      assert.equal(fall.narrowed,true,kind+' funnels into the hole');
+      assert.equal(fall.score,fall.expected,kind+' awards its score exactly once');
+    }
+    assert.equal(await a.T(`__fixture(); player.x=-6; player.prevX=-6; spawn('house',0,0);
+      const dir=steerAI(player,1,0,.1); Math.abs(dir[1])>.3&&Math.abs(Math.hypot(...dir)-1)<1e-6`),true,'AI steers around a blocking building');
+    assert.equal(await a.T(`__fixture();player.x=-6;spawn('house',0,0);
+      for(let i=0;i<240&&Math.hypot(6-player.x,player.z)>1;i++){
+        player.prevX=player.x;player.prevZ=player.z;const [dx,dz]=steerAI(player,6-player.x,-player.z,.05);
+        player.x+=dx*.3;player.z+=dz*.3;resolveHoleMovement(player);
+      } Math.hypot(6-player.x,player.z)<1`),true,'AI reaches food beyond a building instead of oscillating at its edge');
+    assert.deepEqual(await a.T(`__fixture(); player.x=-6; const o=spawn('house',0,0);o.state='queued';
+      steerAI(player,1,0,.1)`),[1,0],'unfinished construction does not divert rivals');
+    assert.equal(await a.T(`__fixture(2); player.R=4; player.shield=0; holes[1].shield=0;
+      holes[1].x=5;holes[1].caution=1; const cover=spawnPU('shield',6,0);
+      withRandom(()=>.5,()=>aiThink(holes[1])); holes[1].target===cover&&holes[1].tk==='pu'`),true,'threatened rivals seek a nearby shield');
+    assert.equal(await a.T(`__fixture(); player.R=6; player.lazy=0; const bus=spawn('bus',4,0), tree=spawn('tree',-4,0);bus.gold=tree.gold=false;
+      withRandom(()=>.5,()=>aiThink(player));player.target===bus`),true,'rivals value the actual bus bonus');
+    assert.equal(await a.T(`__fixture(); player.lazy=0; const speed=spawnPU('speed',4,0), phantom=spawnPU('phantom',-4,0);
+      withRandom(()=>.5,()=>aiThink(player));player.target===phantom`),true,'rivals prioritize the rare Phantom pickup');
+    console.log('PASS collision recovery, swept blocking and food, freeze, falling, AI routes and tactics');
+    assert.deepEqual(a.errors,[]); a.close(); a=await browser('polish-layout');
+    await a.send('Emulation.setDeviceMetricsOverride',{width:480,height:640,deviceScaleFactor:1,mobile:true});
+    assert.equal(await a.evaluate(`(() => {const d=document.querySelector('details.help');d.querySelector('summary').click();
+      const open=d.open;d.querySelector('summary').click();return open&&!d.open;})()`),true,'strategy guide expands and closes');
+    if(process.env.POLISH_SHOT) {
+      await a.T('updateCamera(1); updateTags(); renderer.render(scene,camera)');
+      const shot=await a.send('Page.captureScreenshot',{format:'png'});
+      fs.writeFileSync(process.env.POLISH_SHOT+'-menu.png',Buffer.from(shot.data,'base64'));
+    }
+    await a.T(`startGame(); player.magnetT=10;player.speedT=10;player.phantomT=60;player.shield=10;player.frozenT=3;
+      updHUD(); syncHoles(0);updateCamera(1);updateTags();renderer.render(scene,camera)`);
+    assert.equal(await a.evaluate(`(() => {const r=['mute','music','quit'].map(id=>document.getElementById(id).getBoundingClientRect());
+      return r.every((a,i)=>r.every((b,j)=>i===j||a.right<=b.left||b.right<=a.left||a.bottom<=b.top||b.bottom<=a.top));})()`),true,'mobile sound and quit controls do not overlap');
+    assert.equal(await a.evaluate(`(() => {const r=document.getElementById('chips').getBoundingClientRect();return r.left>=0&&r.right<=innerWidth;})()`),true,'multiple active power-ups stay within the mobile viewport');
+    if(process.env.POLISH_SHOT) {
+      const shot=await a.send('Page.captureScreenshot',{format:'png'});
+      fs.writeFileSync(process.env.POLISH_SHOT+'-play.png',Buffer.from(shot.data,'base64'));
+    }
+    assert.deepEqual(a.errors,[]); console.log('PASS mobile layout and strategy guide'); return;
+  }
   if (process.argv.includes('--rebuild-only')) {
     await a.T(`startGame({mode:'endless'}); player.score=123; player.growth=1300; player.level=4; player.R=3.2;`);
     assert.equal(await a.T('objects.some(o=>o.state==="queued")'),false,'initial Endless city starts fully built');
@@ -514,7 +592,7 @@ try {
   throw error;
 } finally {
   for (const ws of sockets) ws.close();
-  for (const proc of browsers) proc.kill();
+  for (const proc of browsers) stopBrowser(proc);
   server.closeAllConnections(); server.close();
   // Profiles can stay locked briefly after Edge exits; they live under the OS temporary directory.
 }

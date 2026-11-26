@@ -86,16 +86,17 @@ canvas{display:block;touch-action:none}
 .row .dot{width:13px;height:13px;border-radius:50%;border:2px solid #fff;flex:none}
 .row .sc{margin-left:auto;font-weight:900;padding-left:10px}
 .row.dead{opacity:.5}
-#chips{position:absolute;bottom:calc(20px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);display:flex;gap:10px}
+#chips{position:absolute;bottom:calc(20px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);display:flex;gap:10px;
+  flex-wrap:wrap;justify-content:center;width:max-content;max-width:min(80vw,760px)}
 .chip{padding:7px 14px;border-radius:999px;font-weight:900;font-size:17px;background:var(--c);color:#fff;
   box-shadow:0 4px 0 rgba(0,0,0,.3);text-shadow:0 1px 0 rgba(0,0,0,.4)}
 #banner{position:absolute;top:26%;left:0;right:0;text-align:center;font-size:clamp(28px,6vw,54px);font-weight:900;opacity:0;
   -webkit-text-stroke:2px rgba(30,10,60,.6);text-shadow:0 5px 0 rgba(30,10,60,.6)}
 #banner.show{animation:ban 1.6s ease-out forwards}
 @keyframes ban{0%{opacity:0;transform:scale(.5)}12%{opacity:1;transform:scale(1.15)}22%{transform:scale(1)}80%{opacity:1}100%{opacity:0;transform:translateY(-20px)}}
-#music{left:64px!important}
+#music{left:calc(64px + env(safe-area-inset-left))!important}
 #music.off{opacity:.45;text-decoration:line-through}
-#mute,#music{position:fixed;bottom:12px;left:12px;pointer-events:auto;font-size:22px;width:44px;height:44px;border-radius:50%;
+#mute,#music{position:fixed;bottom:calc(12px + env(safe-area-inset-bottom));left:calc(12px + env(safe-area-inset-left));pointer-events:auto;font-size:22px;width:44px;height:44px;border-radius:50%;
   border:2px solid rgba(255,255,255,.4);background:rgba(24,16,52,.55);color:#fff;cursor:pointer;z-index:20}
 #dash{position:fixed;right:calc(18px + env(safe-area-inset-right));bottom:calc(18px + env(safe-area-inset-bottom));z-index:20;
   width:92px;height:92px;border-radius:50%;border:4px solid #fff;font:inherit;font-weight:900;font-size:17px;color:#3a2500;cursor:pointer;
@@ -105,7 +106,7 @@ canvas{display:block;touch-action:none}
 #dash.cool{color:#fff;box-shadow:0 6px 0 #3a3156}
 #dash.frozen{background:#6fe3ff;color:#06304a;animation:pulseD .4s infinite alternate}
 @keyframes pulseD{to{transform:scale(1.08)}}
-#quit{position:fixed;bottom:12px;left:64px;pointer-events:auto;font:inherit;font-size:14px;font-weight:900;height:44px;padding:0 14px;border-radius:22px;
+#quit{position:fixed;bottom:calc(12px + env(safe-area-inset-bottom));left:calc(116px + env(safe-area-inset-left));pointer-events:auto;font:inherit;font-size:14px;font-weight:900;height:44px;padding:0 14px;border-radius:22px;
   border:2px solid rgba(255,255,255,.4);background:rgba(24,16,52,.55);color:#fff;cursor:pointer;z-index:20}
 #joy{position:fixed;width:110px;height:110px;margin:-55px 0 0 -55px;border-radius:50%;border:3px solid rgba(255,255,255,.5);
   background:rgba(255,255,255,.08);pointer-events:none;z-index:5}
@@ -124,6 +125,9 @@ canvas{display:block;touch-action:none}
 @keyframes wob{50%{transform:rotate(2deg) scale(1.04)}}
 .sub{font-size:clamp(16px,3vw,22px);font-weight:900;text-shadow:0 2px 0 #2a1a5e}
 .help{font-size:clamp(13px,2.4vw,16px);line-height:1.7;opacity:.95;background:rgba(24,16,52,.6);padding:10px 18px;border-radius:14px}
+.help summary{cursor:pointer;font-weight:900;min-height:26px}
+.help ul{max-width:640px;text-align:left;padding-left:22px;margin:10px 0 0}
+.controls{font-size:clamp(12px,2vw,16px);font-weight:700}
 .btn{pointer-events:auto;font:inherit;font-size:32px;font-weight:900;padding:14px 54px;border:none;border-radius:999px;
   background:linear-gradient(#ffe66d,#ffb703);color:#3a2500;box-shadow:0 7px 0 #b57a00,0 12px 24px rgba(0,0,0,.4);cursor:pointer;transition:transform .1s}
 .btn:hover{transform:translateY(-2px) scale(1.04)}
@@ -176,6 +180,7 @@ canvas{display:block;touch-action:none}
   #mini{width:120px;height:120px}#stats{top:calc(142px + env(safe-area-inset-top))}
   #stats{min-width:120px;padding:7px 10px}#score{font-size:22px}#sizeName{font-size:12px}#canEat{display:none}
   #board{min-width:150px;padding:7px 10px}.row{font-size:12px}#timer{font-size:24px;top:auto;bottom:70px}
+  #chips{bottom:calc(170px + env(safe-area-inset-bottom));gap:6px;max-width:90vw}.chip{font-size:13px;padding:5px 9px}
 }
 </style>
 </head>
@@ -212,17 +217,15 @@ canvas{display:block;touch-action:none}
     <button id="playBtn" class="btn">👤 SINGLE PLAYER</button>
     <button id="mpBtn" class="btn alt">👥 MULTIPLAYER</button>
   </div>
-  <div class="help">
-    <b>WASD / Arrow keys</b> to move &nbsp;·&nbsp; <b>Drag</b> on touch screens<br>
-    Eat things smaller than you: cones → people → cars → trees → houses → skyscrapers → the 2000 ft tower<br>
-    <b>20 Towns:</b> grow big enough to move up to a bigger town · reach Town 20 to win<br>
-    <b>Classic:</b> one giant city, no levels · the game ends when the whole city is gulped<br>
-    <b>Endless:</b> the city rebuilds over 2 minutes, starting every 15 minutes · keep your size and score<br>
-    Daytime buses drop off people · buses give +20 bonus points · skyscrapers give +200<br>
-    <b>Dominance win:</b> stay at least 2× the next-biggest player's size for 5 seconds to win<br>
-    🧲 Magnet &nbsp; ⚡ Speed &nbsp; ❄️ Freeze rivals &nbsp; ✨ Golden things = 5× points
-    <br>👻 Phantom appears every 10 minutes: invisible, untouchable + eat any player for 60s
-  </div>
+  <div class="controls">WASD / Arrows or drag to move · Shift / E or tap DASH to dash</div>
+  <details class="help"><summary>How to win &amp; game plans</summary><ul>
+    <li><b>Grow a route:</b> start with cones and bins, then people, cars, buses, houses and skyscrapers. Gold objects are worth 5× points.</li>
+    <li><b>Choose valuable targets:</b> buses give +20 bonus points and skyscrapers +200. Daytime buses drop off extra people at stops.</li>
+    <li><b>Escape danger:</b> dash away from bigger holes. If Freeze catches you, DASH breaks you free. Shields block normal gulps and Freeze.</li>
+    <li><b>Pick your goal:</b> reach Town 20 in 20 Towns, gulp the whole city in Classic, or keep growing in Endless. Endless rebuilds over 2 minutes, starting every 15 minutes.</li>
+    <li><b>Keep a lead:</b> at least 2× the next-biggest player's size for 5 seconds wins. Phantom and protected rivals pause that countdown.</li>
+    <li><b>Watch for Phantom:</b> it appears every 10 minutes and makes you invisible, untouchable and able to eat any player for 60 seconds.</li>
+  </ul></details>
   <div id="best"></div>
   <button id="bugBtn" class="btn small grey">🐞 Problem log</button>
 </div>
@@ -587,6 +590,7 @@ const DEF = {
   giant:    { r: 12,  h: 610, pts: 6000, label: 'THE 2000 FT TOWER', color: 0x9fd8ff },  // 610 m ≈ 2000 ft
 };
 const GOLDABLE = new Set(['cone', 'bin', 'hydrant', 'mailbox', 'bush', 'person', 'bench', 'lamp', 'car', 'tree', 'bus', 'fountain']);
+const MAX_OBJECT_RADIUS = Math.max(...Object.values(DEF).map(d => d.r));
 
 const TREE_GREENS = [0x4caf50, 0x66bb6a, 0x2e9e4f, 0x8bc34a];
 const SHIRTS = [0xe53935, 0x1e88e5, 0x43a047, 0xfdd835, 0x8e24aa, 0xff7043, 0x00acc1, 0xffffff, 0xec407a];
@@ -1306,9 +1310,9 @@ function makeTubeMat(color) {
 
 const SP_HOLES = [
   { name: 'YOU', color: 0x8a5cff, player: true },
-  { name: 'Sir Slurpsalot', color: 0xff4f9a },
-  { name: 'Munchbot 3000', color: 0x1ed6c0 },
-  { name: "Gobblin' Greta", color: 0xffa020 },
+  { name: 'Sir Slurpsalot', color: 0xff4f9a, plan: 'hunter' },
+  { name: 'Munchbot 3000', color: 0x1ed6c0, plan: 'collector' },
+  { name: "Gobblin' Greta", color: 0xffa020, plan: 'survivor' },
 ];
 const MP_COLORS = [0x8a5cff, 0xff4f9a, 0x1ed6c0, 0xffa020, 0x3d8bff, 0xe53935, 0x43d14a, 0xffd23f, 0xff7ac8, 0x00b8d9,
   0xa0522d, 0x9be62a, 0xff6f3c, 0xb388ff, 0x20b2aa, 0xc2185b, 0x6b8e23, 0xffffff, 0x4682b4, 0x333344];
@@ -1331,8 +1335,9 @@ function makeHole(def) {
   tag.style.background = css; tag.textContent = def.name; $('tags').appendChild(tag);
   if (def.color === 0xffffff) { tag.style.color = '#2a1a5e'; tag.style.textShadow = 'none'; }
   return { name: def.name, baseColor: new THREE.Color(def.color), css, isPlayer: !!def.player, remote: !!def.remote, pid: def.pid || null,
-    grp, tm, rimMat, rim, mag, tag, glow, glowMat,
-    x: 0, z: 0, vx: 0, vz: 0, R: LEVELS[0].R, level: 0, growth: 0, score: 0, alive: true, dying: false, lv: 0,
+    grp, tm, rimMat, rim, mag, tag, glow, glowMat, plan: def.plan || 'balanced',
+    avoidT: 0, steerX: 0, steerZ: 0, avoidSide: def.color & 1 ? 1 : -1,
+    x: 0, z: 0, prevX: 0, prevZ: 0, vx: 0, vz: 0, R: LEVELS[0].R, level: 0, growth: 0, score: 0, alive: true, dying: false, lv: 0,
     respawnT: 0, frozenT: 0, speedT: 0, magnetT: 0, phantomT: 0, shield: 0, spd: rand(.8, .88), caution: rand(.6, .95), lazy: rand(.15, .28),
     aiT: 0, mode: 'wander', target: null, tk: null, wx: 0, wz: 0, fx: 0, fz: 0, chkT: 0, cx: 0, cz: 0, stuckT: 0, sdx: 0, sdz: 0,
     nx: 0, nz: 0, nvx: 0, nvz: 0, nR: LEVELS[0].R, netT: 0 };
@@ -1361,9 +1366,10 @@ function targetRadius(h) {
 function resetHoles(starts) {
   holes.forEach((h, i) => {
     h.x = h.nx = starts[i][0]; h.z = h.nz = starts[i][1]; h.vx = h.vz = h.nvx = h.nvz = 0;
+    h.prevX = h.x; h.prevZ = h.z;
     h.level = 0; h.growth = 0; h.keep = 0; h.score = 0; h.R = h.nR = LEVELS[0].R; h.lv = 0;
     h.alive = true; h.dying = false; h.frozenT = h.speedT = h.magnetT = h.phantomT = 0; h.shield = 0; h.boostT = 0;
-    h.aiT = 0; h.stuckT = 0; h.grp.visible = true;
+    h.aiT = 0; h.stuckT = 0; h.avoidT = 0; h.grp.visible = true;
   });
 }
 function addPoints(h, pts) {
@@ -1390,6 +1396,7 @@ function respawnHole(h) {
     if (d > 30) break;
   }
   h.x = best[0]; h.z = best[1]; h.vx = h.vz = 0;
+  h.prevX = h.x; h.prevZ = h.z;
   h.growth = h.keep || 0; h.keep = 0; h.level = 0;
   while (h.level < LEVELS.length - 1 && h.growth >= LEVELS[h.level + 1].need) h.level++;
   h.R = targetRadius(h);   // comes back with some of its size
@@ -1822,6 +1829,7 @@ canvas.addEventListener('pointerdown', e => {
   if (touch.active || !e.isPrimary) return;
   if (net.spec) { followNext(); return; }
   touch.active = true; touch.id = e.pointerId; touch.sx = touch.x = e.clientX; touch.sy = touch.y = e.clientY;
+  if (e.isTrusted) canvas.setPointerCapture(e.pointerId);
   $('joy').classList.remove('hidden'); updJoy();
 });
 addEventListener('pointermove', e => {
@@ -1833,6 +1841,7 @@ addEventListener('pointermove', e => {
 });
 const endTouch = e => { if (e.pointerId === touch.id) { touch.active = false; $('joy').classList.add('hidden'); } };
 addEventListener('pointerup', endTouch); addEventListener('pointercancel', endTouch);
+canvas.addEventListener('lostpointercapture', endTouch);
 function updJoy() {
   const j = $('joy'); j.style.left = touch.sx + 'px'; j.style.top = touch.sy + 'px';
   $('knob').style.transform = `translate(${touch.x - touch.sx}px,${touch.y - touch.sy}px)`;
@@ -1853,13 +1862,19 @@ function inputDir() {
 
 /* ---------------- AI ---------------- */
 function aiThink(h) {
+  h.avoidT = 0;
   let fx = 0, fz = 0, threat = 0;
+  const predators = [];
   for (const o of holes) {
     if (o === h || !o.alive || o.phantomT > 0 || !canEatHole(o, h)) continue;
     const dx = h.x - o.x, dz = h.z - o.z, d = Math.hypot(dx, dz) || 1, danger = o.R * 2.2 + 8;
+    if (d < danger + 12) predators.push(o);
     if (d < danger) { const w = (danger - d) / danger; fx += dx / d * w; fz += dz / d * w; threat += w; }
   }
   if (h.shield <= 0 && threat > .15 && Math.random() < h.caution) {
+    const cover = powerups.filter(p => !p.dead && (p.type === 'shield' || p.type === 'phantom') && Math.hypot(p.x-h.x,p.z-h.z)<10)
+      .sort((a,b)=>Math.hypot(a.x-h.x,a.z-h.z)-Math.hypot(b.x-h.x,b.z-h.z))[0];
+    if (cover) { h.mode='target'; h.target=cover; h.tk='pu'; return; }
     const L = Math.hypot(fx, fz) || 1; h.mode = 'flee'; h.fx = fx / L; h.fz = fz / L;
     if (Math.abs(h.x) > HALF - 9) h.fx -= Math.sign(h.x) * .8;
     if (Math.abs(h.z) > HALF - 9) h.fz -= Math.sign(h.z) * .8;
@@ -1869,19 +1884,23 @@ function aiThink(h) {
   for (const o of holes) {
     if (o === h || !o.alive || o.phantomT > 0 || o.shield > 0 || !canEatHole(h, o)) continue;
     const d = Math.hypot(o.x - h.x, o.z - h.z);
-    if (d < 30) { const s = (30 + o.growth * .3) / (d + 4); if (s > bs) { bs = s; best = o; tk = 'hole'; } }
+    if (d < 30) { const s = (30 + o.growth * .3) / (d + 4) * (h.plan === 'hunter' ? 1.35 : h.plan === 'collector' ? .7 : 1); if (s > bs) { bs = s; best = o; tk = 'hole'; } }
   }
   const lim = frenzy ? 1e9 : h.R * EAT, far = objects.length < 300 ? 1e9 : 1600;   // sparse town: look across the whole map
   for (const o of objects) {
     if (o.state !== 'idle' || o.r > lim) continue;
     const dx = o.x - h.x, dz = o.z - h.z, d2 = dx * dx + dz * dz;
     if (d2 > far) continue;
-    const s = o.pts * (o.gold ? 5 : 1) / (Math.sqrt(d2) + 3) * rand(.3, 1.7);
+    const risky = h.shield <= 0 && h.phantomT <= 0 && predators.some(p => Math.hypot(o.x-p.x,o.z-p.z)<p.R+3);
+    const s = objectPoints(o) / (Math.sqrt(d2) + 3) * rand(.7, 1.3) * (risky ? .12 : 1) * (h.plan === 'collector' ? 1.25 : 1);
     if (s > bs) { bs = s; best = o; tk = 'obj'; }
   }
   for (const p of powerups) {
+    if (p.dead) continue;
     const d = Math.hypot(p.x - h.x, p.z - h.z);
-    if (d < 25) { const s = (6 + h.R * 4) / (d + 3); if (s > bs) { bs = s; best = p; tk = 'pu'; } }
+    const redundant = (p.type === 'shield' && h.shield > 0) || (p.type === 'speed' && h.speedT > 0) || (p.type === 'magnet' && h.magnetT > 0);
+    const value = p.type === 'phantom' ? 4 : redundant ? .4 : p.type === 'shield' ? 1.8 : 1;
+    if (d < 25) { const s = (6 + h.R * 4) / (d + 3) * value * (h.plan === 'survivor' ? 1.25 : 1); if (s > bs) { bs = s; best = p; tk = 'pu'; } }
   }
   if (!best || (tk !== 'hole' && Math.random() < h.lazy * .25)) {
     if (h.mode !== 'wander' || Math.hypot(h.wx - h.x, h.wz - h.z) < 4) { [h.wx, h.wz] = roadPoint(); }
@@ -1890,6 +1909,31 @@ function aiThink(h) {
     return;
   }
   h.mode = 'target'; h.target = best; h.tk = tk;
+}
+function steerAI(h, dx, dz, dt) {
+  const length = Math.hypot(dx, dz);
+  if (length < 1e-6) return [0, 0];
+  dx /= length; dz /= length; h.avoidT -= dt;
+  if (h.avoidT > 0) return [h.steerX, h.steerZ];
+  h.avoidT = .18;
+  const reach = 3 + holeSpeed(h.R) * .7, nearby = [];
+  if (!frenzy) for (const o of objects) {
+    if (o.state === 'idle' && o.r > h.R * EAT && Math.abs(o.x-h.x)<reach+o.r+h.R && Math.abs(o.z-h.z)<reach+o.r+h.R) nearby.push(o);
+  }
+  let best = -Infinity, bx = dx, bz = dz;
+  for (const angle of [0, .45, -.45, .9, -.9, 1.4, -1.4, 2, -2]) {
+    const a = angle * h.avoidSide, x = dx*Math.cos(a)-dz*Math.sin(a), z = dx*Math.sin(a)+dz*Math.cos(a);
+    const tx = h.x+x*reach, tz = h.z+z*reach;
+    let score = (x*dx+z*dz)*3;
+    if (Math.abs(tx)>HALF-1 || Math.abs(tz)>HALF-1) score-=10;
+    for (const o of nearby) {
+      const radius = o.r+h.R*.35+.25, distance = Math.sqrt(distanceToSegmentSq(o.x,o.z,h.x,h.z,tx,tz));
+      if (distance<radius) score-=12+(radius-distance)*3;
+    }
+    if (score>best) { best=score; bx=x; bz=z; }
+  }
+  h.steerX=bx; h.steerZ=bz;
+  return [bx,bz];
 }
 function aiDir(h, dt) {
   h.aiT -= dt;
@@ -1901,20 +1945,83 @@ function aiDir(h, dt) {
     }
     h.cx = h.x; h.cz = h.z; h.chkT = 0;
   }
-  if (h.stuckT > 0) { h.stuckT -= dt; if (h.stuckT <= 0) h.aiT = 0; return [h.sdx, h.sdz]; }
-  if (h.mode === 'flee') return [h.fx, h.fz];
+  if (h.stuckT > 0) { h.stuckT -= dt; if (h.stuckT <= 0) h.aiT = 0; return steerAI(h,h.sdx,h.sdz,dt); }
+  if (h.mode === 'flee') return steerAI(h,h.fx,h.fz,dt);
   let tx, tz;
   if (h.mode === 'target') {
     const t = h.target;
     const bad = h.tk === 'obj' ? t.state !== 'idle' : h.tk === 'hole' ? !t.alive || t.phantomT > 0 : t.dead;
     if (bad) { h.aiT = 0; return [0, 0]; }
     tx = t.x; tz = t.z;
+    if (h.tk === 'obj' && t.move?.type === 'lane' && !(t.move.wait>0)) {
+      const ahead = Math.min(1.2,Math.hypot(tx-h.x,tz-h.z)/Math.max(1,holeSpeed(h.R)));
+      if (t.move.axis === 'x') tx=clamp(tx+t.move.dir*t.move.speed*ahead,-HALF,HALF);
+      else tz=clamp(tz+t.move.dir*t.move.speed*ahead,-HALF,HALF);
+    }
   } else { tx = h.wx; tz = h.wz; }
   const dx = tx - h.x, dz = tz - h.z, d = Math.hypot(dx, dz) || 1;
-  return [dx / d, dz / d];
+  return steerAI(h,dx/d,dz/d,dt);
 }
 
 /* ---------------- objects update (movement, blocking, falling) ---------------- */
+function distanceToSegmentSq(x, z, ax, az, bx, bz) {
+  const dx = bx - ax, dz = bz - az, len = dx * dx + dz * dz;
+  const t = len > 1e-10 ? clamp(((x - ax) * dx + (z - az) * dz) / len, 0, 1) : 0;
+  return (x - ax - dx * t) ** 2 + (z - az - dz * t) ** 2;
+}
+function stopClosingVelocity(h, nx, nz) {
+  const inward = h.vx * nx + h.vz * nz;
+  if (inward < 0) { h.vx -= nx * inward; h.vz -= nz * inward; }
+}
+function clampHole(h) {
+  h.x = clamp(h.x, -HALF, HALF); h.z = clamp(h.z, -HALF, HALF);
+  if ((h.x <= -HALF && h.vx < 0) || (h.x >= HALF && h.vx > 0)) h.vx = 0;
+  if ((h.z <= -HALF && h.vz < 0) || (h.z >= HALF && h.vz > 0)) h.vz = 0;
+}
+function resolveObstacle(h, o, swept) {
+  const radius = o.r + h.R * .35;
+  const ax = h.prevX, az = h.prevZ, sx = ax - o.x, sz = az - o.z;
+  const dx = h.x - ax, dz = h.z - az, speedSq = dx * dx + dz * dz;
+  const outside = sx * sx + sz * sz - radius * radius;
+  if (swept && outside >= 0 && speedSq > 1e-10) {
+    const approach = sx * dx + sz * dz, disc = approach * approach - speedSq * outside;
+    if (approach < 0 && disc >= 0) {
+      const t = (-approach - Math.sqrt(disc)) / speedSq;
+      if (t >= 0 && t <= 1) {
+        const nx = (sx + dx * t) / radius, nz = (sz + dz * t) / radius;
+        const closing = Math.min(0, dx * nx + dz * nz);
+        h.x = ax + dx * t + (dx - nx * closing) * (1 - t) + nx * .0001;
+        h.z = az + dz * t + (dz - nz * closing) * (1 - t) + nz * .0001;
+        stopClosingVelocity(h, nx, nz);
+      }
+    }
+  }
+  let nx = h.x - o.x, nz = h.z - o.z, d = Math.hypot(nx, nz);
+  if (d >= radius) return;
+  if (d < 1e-7) {
+    nx = sx; nz = sz; d = Math.hypot(nx, nz);
+    if (d < 1e-7) { nx = -h.vx; nz = -h.vz; d = Math.hypot(nx, nz); }
+    if (d < 1e-7) { nx = 1; nz = 0; d = 1; }
+  }
+  nx /= d; nz /= d;
+  h.x = o.x + nx * (radius + .0001); h.z = o.z + nz * (radius + .0001);
+  stopClosingVelocity(h, nx, nz);
+}
+function resolveHoleMovement(h) {
+  if (!h.alive || h.remote) return;
+  if (!frenzy) {
+    const pad = MAX_OBJECT_RADIUS + h.R * .35;
+    const minX = Math.min(h.prevX, h.x) - pad, maxX = Math.max(h.prevX, h.x) + pad;
+    const minZ = Math.min(h.prevZ, h.z) - pad, maxZ = Math.max(h.prevZ, h.z) + pad;
+    const nearby = [];
+    for (const o of objects) {
+      if (o.state !== 'idle' || o.r <= h.R * EAT || o.x < minX || o.x > maxX || o.z < minZ || o.z > maxZ) continue;
+      nearby.push(o); resolveObstacle(h, o, true);
+    }
+    for (const o of nearby) resolveObstacle(h, o, false);
+  }
+  clampHole(h);
+}
 function moveObj(o, dt, time) {
   const m = o.move;
   if (m.type === 'lane') {
@@ -1980,22 +2087,25 @@ function updateFall(o, dt) {
   let d = Math.hypot(o.rx, o.rz);
   const inS = (.8 + R * 1.4) * (.5 + o.t * 2.5);           // slide toward the middle
   if (d > 1e-4) { const nd = Math.max(0, d - inS * dt); o.rx *= nd / d; o.rz *= nd / d; d = nd; }
-  const g = (16 + R * 6) * Math.min(1, .25 + o.t * 3);     // gentle tip first, then drop
+  const g = (16 + R * 6 + Math.min(o.h * .45, 180)) * Math.min(1, .25 + o.t * 3);
   o.vy -= g * dt; o.y += o.vy * dt;
   if (o.y < -.1) { const lim = Math.max(0, R - o.r * .7); if (d > lim) { o.rx *= lim / d; o.rz *= lim / d; } }
   o.tilt += (o.maxTilt - o.tilt) * (1 - Math.exp(-dt * 5));
   o.spinA += o.spin * dt;
   _q1.setFromAxisAngle(o.axis, o.tilt); _q2.setFromAxisAngle(UP, o.spinA);
   o.grp.quaternion.copy(_q1).multiply(_q2).multiply(o.baseQ);
+  const funnel = lerp(1, Math.min(1, R * EAT / o.r), smooth(0, .9, o.t));
+  o.grp.scale.set(funnel, 1, funnel);
   o.grp.position.set(h.x + o.rx, o.y, h.z + o.rz);
-  if (o.y < -(o.h * .9 + R * .8 + .8) || o.t > 4) finishEat(o, h);
+  if (o.y < -(o.h + o.r * 2 + R * .8 + .8)) finishEat(o, h);
 }
 function updateObjects(dt, time) {
   const k = 1 - Math.exp(-dt * 10);
+  for (const o of objects) if (o.state === 'idle' && o.move) moveObj(o, dt, time);
+  for (const h of holes) resolveHoleMovement(h);
   for (const o of objects) {
     if (o.state === 'fall') { updateFall(o, dt); continue; }
     if (o.state !== 'idle') continue;
-    if (o.move) moveObj(o, dt, time);
     let wob = 0;
     for (const h of holes) {
       if (!h.alive) continue;
@@ -2011,17 +2121,12 @@ function updateObjects(dt, time) {
           }
         }
         const lim = o.r > h.R * EAT ? h.R * .75 : h.R - o.r * .4;   // (frenzy: even huge things fall in)
-        if (d2 < lim * lim) { startFall(o, h); break; }
+        const pathD2 = h.remote ? d2 : distanceToSegmentSq(o.x, o.z, h.prevX, h.prevZ, h.x, h.z);
+        if (Math.min(d2, pathD2) < lim * lim) { startFall(o, h); break; }
         const edge = h.R + o.r * .55;
         if (d2 < edge * edge) {             // teetering on the rim
           const d = Math.sqrt(d2), f = 1 - (d - lim) / (edge - lim);
           if (f > wob) { wob = f; o.wax = dx / d; o.waz = dz / d; }
-        }
-      } else {
-        const minD = o.r + h.R * .35;      // too big: blocks the hole
-        if (d2 < minD * minD) {
-          const d = Math.sqrt(d2) || .01, push = minD - d;
-          h.x -= dx / d * push; h.z -= dz / d * push;
         }
       }
     }
@@ -2041,6 +2146,7 @@ function updateObjects(dt, time) {
 /* ---------------- holes update ---------------- */
 function updateHoles(dt, time) {
   for (const h of holes) {
+    h.prevX = h.x; h.prevZ = h.z;
     h.phantomT = Math.max(0, h.phantomT - dt);
     if (h.dying) {
       h.dieT += dt;
@@ -2064,13 +2170,13 @@ function updateHoles(dt, time) {
     }
     if (!h.alive) { h.respawnT -= dt; if (h.respawnT <= 0) { respawnHole(h); if (h.isPlayer && net.inGame) netState(true); } continue; }
     let [mx, mz] = (h.isPlayer && state === 'play') ? inputDir() : aiDir(h, dt);
-    if (h.frozenT > 0) { h.frozenT -= dt; mx = mz = 0; if (Math.random() < .3) emit(h.x + rand(-h.R, h.R), 1.5, h.z + rand(-h.R, h.R), 0, -1, 0, 0xffffff, .25, 1, 1); }
+    if (h.frozenT > 0) { h.frozenT -= dt; mx = mz = 0; h.vx = h.vz = 0; if (Math.random() < .3) emit(h.x + rand(-h.R, h.R), 1.5, h.z + rand(-h.R, h.R), 0, -1, 0, 0xffffff, .25, 1, 1); }
     h.speedT = Math.max(0, h.speedT - dt); h.magnetT = Math.max(0, h.magnetT - dt); h.shield = Math.max(0, h.shield - dt);
     h.boostT = Math.max(0, (h.boostT || 0) - dt);
     const sp = holeSpeed(h.R) * (frenzy ? 1.5 : 1) * (h.speedT > 0 ? 1.6 : 1) * (h.boostT > 0 ? 2 : 1) * (h.isPlayer && dashT > 0 ? 2.2 : 1) * (h.isPlayer && state === 'play' ? 1 : h.spd);
     const k2 = 1 - Math.exp(-dt * 16);   // snappy steering
     h.vx += (mx * sp - h.vx) * k2; h.vz += (mz * sp - h.vz) * k2;
-    h.x = clamp(h.x + h.vx * dt, -HALF, HALF); h.z = clamp(h.z + h.vz * dt, -HALF, HALF);
+    h.x += h.vx * dt; h.z += h.vz * dt; clampHole(h);
     h.R += (targetRadius(h) - h.R) * (1 - Math.exp(-dt * 3));
     const spd = Math.hypot(h.vx, h.vz);
     if (spd > 2 && Math.random() < dt * (6 + h.R * 2)) {
@@ -2089,22 +2195,24 @@ function holeVsHole() {
     const a = holes[i], b = holes[j];
     if (!a.alive || !b.alive || (a.remote && b.remote)) continue;
     const mp = a.remote || b.remote;   // multiplayer: only the victim's own screen decides it got gulped
-    const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz) || .01;
+    const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz);
     const aBig = canEatHole(a, b), bBig = canEatHole(b, a);
-    if (aBig && bBig) {
+    const aCan = aBig && (b.shield <= 0 || a.phantomT > 0), bCan = bBig && (a.shield <= 0 || b.phantomT > 0);
+    if (aCan && bCan) {
       if (d < Math.min(a.R, b.R) * .8) {
-        const eater = chooseHoleEater(a, b, dx, dz, d), victim = eater === a ? b : a;
+        const eater = chooseHoleEater(a, b, dx, dz, Math.max(.01, d)), victim = eater === a ? b : a;
         if (victim.shield <= 0 || eater.phantomT > 0) { if (!mp) eatHole(eater, victim); else if (victim.isPlayer) netGulpedBy(eater); }
       }
       continue;
     }
-    if (aBig && (b.shield <= 0 || a.phantomT > 0) && d < gulpReach(a, b)) { if (!mp) eatHole(a, b); else if (b.isPlayer) netGulpedBy(a); continue; }
-    if (bBig && (a.shield <= 0 || b.phantomT > 0) && d < gulpReach(b, a)) { if (!mp) eatHole(b, a); else if (a.isPlayer) netGulpedBy(b); continue; }
+    if (aCan && d < gulpReach(a, b)) { if (!mp) eatHole(a, b); else if (b.isPlayer) netGulpedBy(a); continue; }
+    if (bCan && d < gulpReach(b, a)) { if (!mp) eatHole(b, a); else if (a.isPlayer) netGulpedBy(b); continue; }
     const minD = (a.R + b.R) * .8;
-    if (!aBig && !bBig && d < minD) {
+    if (!aCan && !bCan && d < minD) {
       const p = (minD - d) / (mp ? 1 : 2);
-      if (!a.remote) { a.x -= dx / d * p; a.z -= dz / d * p; }
-      if (!b.remote) { b.x += dx / d * p; b.z += dz / d * p; }
+      const nx = d > 1e-7 ? dx / d : (a.pid || a.name) < (b.pid || b.name) ? 1 : -1, nz = d > 1e-7 ? dz / d : 0;
+      if (!a.remote) { a.x -= nx * p; a.z -= nz * p; stopClosingVelocity(a, -nx, -nz); clampHole(a); }
+      if (!b.remote) { b.x += nx * p; b.z += nz * p; stopClosingVelocity(b, nx, nz); clampHole(b); }
     }
   }
 }
@@ -2637,7 +2745,7 @@ function updDash(dt) {
 $('dash').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); doDash(); });
 
 /* ---------------- problem log (see the script in <head>) ---------------- */
-const VERSION = '2026-11-25a';
+const VERSION = '2026-11-26a';
 window.__gcStarted = true;
 window.__gcCtx = () => ({
   player: localStorage.getItem('gulpcity_name') || '(no name)',
